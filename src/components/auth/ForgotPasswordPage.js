@@ -172,7 +172,7 @@ export default function ForgotPasswordPage() {
               </div>
               <div style={{fontWeight:800,fontSize:20,marginBottom:6}}>Forgot Password?</div>
               <div style={{fontSize:13,color:"var(--t2)",lineHeight:1.6}}>
-                Enter your registered email address.<br/>We'll send you a 6-digit verification code.
+                Enter your registered email address.<br/>{"We'll send you a 6-digit verification code."}
               </div>
             </div>
 
@@ -250,7 +250,7 @@ export default function ForgotPasswordPage() {
             </button>
 
             <p style={{textAlign:"center",fontSize:13,color:"var(--t2)"}}>
-              Didn't get the code?{" "}
+              {"Didn't get the code? "}
               {resendCd > 0
                 ? <span style={{color:"var(--t3)",fontFamily:"var(--m)"}}>Resend in {resendCd}s</span>
                 : <span style={{color:"var(--gold)",cursor:"pointer",fontWeight:700}} onClick={resendOtp}>Resend Code</span>

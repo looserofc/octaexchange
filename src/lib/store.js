@@ -1,157 +1,189 @@
 import { create } from "zustand";
-import {
-  COINS, SIGNALS_INIT,
-  ORDER_HISTORY_INIT, TX_HISTORY_INIT,
-  NOTIFS_INIT, BANNERS_INIT,
-} from "./data";
+import { COINS, SIGNALS_INIT, ORDER_HISTORY_INIT, TX_INIT, NOTIFS_INIT, BANNERS_INIT, FUND_WD_FEE, TRADE_OUT_FEE, FREEZE_MS } from "./data";
 
-// ── CoinGecko ID map ───────────────────────────────────────
-const GECKO_IDS = {
-  BTC:   "bitcoin",
-  ETH:   "ethereum",
-  BNB:   "binancecoin",
-  SOL:   "solana",
-  XRP:   "ripple",
-  ADA:   "cardano",
-  DOGE:  "dogecoin",
-  AVAX:  "avalanche-2",
-  DOT:   "polkadot",
-  MATIC: "matic-network",
-};
+const GID = {BTC:"bitcoin",ETH:"ethereum",BNB:"binancecoin",SOL:"solana",XRP:"ripple",ADA:"cardano",DOGE:"dogecoin",AVAX:"avalanche-2",DOT:"polkadot",MATIC:"matic-network"};
 
-// ── Build initial chart data ───────────────────────────────
 function buildCharts() {
-  const charts = {};
-  Object.keys(COINS).forEach((sym) => {
-    const base  = COINS[sym].price;
-    const trend = COINS[sym].change >= 0 ? 1 : -1;
-    let   cur   = base * 0.987;
-    const pts   = [];
-    for (let i = 0; i < 80; i++) {
-      cur = Math.max(base * 0.95, Math.min(base * 1.05, cur + (Math.random() - 0.48) * base * 0.004 + trend * base * 0.0002));
-      pts.push(cur);
-    }
-    pts.push(base);
-    charts[sym] = pts;
+  const o={};
+  Object.keys(COINS).forEach(sym=>{
+    const base=COINS[sym].price, dir=COINS[sym].change>=0?1:-1;
+    let v=base*.986; const pts=[];
+    for(let i=0;i<80;i++){v=Math.max(base*.95,Math.min(base*1.05,v+(Math.random()-.48)*base*.004+dir*base*.0002));pts.push(v);}
+    pts.push(base); o[sym]=pts;
   });
-  return charts;
+  return o;
 }
 
-function buildInitialPrices() {
-  const p = {};
-  Object.keys(COINS).forEach((k) => { p[k] = COINS[k].price; });
-  return p;
+function buildCandles(sym) {
+  const base=COINS[sym].price, dir=COINS[sym].change>=0?1:-1;
+  const out=[]; let price=base*.985;
+  for(let i=0;i<60;i++){
+    const o2=price, mv=(Math.random()-.46+dir*.04)*base*.008;
+    const c=Math.max(base*.92,Math.min(base*1.08,o2+mv));
+    const h=Math.max(o2,c)+Math.random()*base*.003, l=Math.min(o2,c)-Math.random()*base*.003;
+    out.push({t:Date.now()-(60-i)*60000,o:o2,h,l,c}); price=c;
+  }
+  return out;
 }
 
-export const useStore = create((set, get) => ({
-  // ── Auth ─────────────────────────────────────────────────
-  user: null,
-  setUser: (user) => set({ user }),
-  logout: () => set({ user: null }),
+function buildPrices(){const p={};Object.keys(COINS).forEach(k=>{p[k]=COINS[k].price;});return p;}
 
-  // ── Navigation ───────────────────────────────────────────
-  page: "home",
-  setPage: (page) => set({ page }),
-  profileTab: "account",
-  setProfileTab: (tab) => set({ profileTab: tab }),
+export const useStore = create((set,get)=>({
+  user:null, setUser:(u)=>set({user:u}), logout:()=>set({user:null}),
+  page:"home", setPage:(p)=>set({page:p}),
+  profileTab:"account", setProfileTab:(t)=>set({profileTab:t}),
+  profileScreen:null, setProfileScreen:(s)=>set({profileScreen:s}),
+  assetsScreen:null, setAssetsScreen:(s)=>set({assetsScreen:s}),
+  adminAuthed:false, setAdminAuthed:(v)=>set({adminAuthed:v}),
+  showAdmin:false,   setShowAdmin:(v)=>set({showAdmin:v}),
 
-  // ── Admin ────────────────────────────────────────────────
-  showAdmin:    false,
-  setShowAdmin: (v) => set({ showAdmin: v }),
-  adminAuthed:  false,
-  setAdminAuthed: (v) => set({ adminAuthed: v }),
+  prices:buildPrices(),
+  charts:buildCharts(),
+  candles:(()=>{const c={};Object.keys(COINS).forEach(k=>{c[k]=buildCandles(k);});return c;})(),
+  _ct:{},
 
-  // ── Prices (real from CoinGecko, fallback to simulated) ──
-  prices:       buildInitialPrices(),
-  charts:       buildCharts(),
-  pricesFetched: false,
+  wick:null, setWick:(w)=>set({wick:w}),
 
-  // Fetch real prices from CoinGecko (free, no API key needed)
-  fetchRealPrices: async () => {
-    try {
-      const ids = Object.values(GECKO_IDS).join(",");
-      const res = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
-        { cache: "no-store" }
-      );
-      if (!res.ok) throw new Error("CoinGecko fetch failed");
-      const data = await res.json();
-
-      const newPrices = { ...get().prices };
-      Object.entries(GECKO_IDS).forEach(([sym, geckoId]) => {
-        const entry = data[geckoId];
-        if (entry?.usd) newPrices[sym] = entry.usd;
-      });
-      set({ prices: newPrices, pricesFetched: true });
-    } catch (e) {
-      // Silently fall back to simulated prices
-      console.warn("CoinGecko unavailable, using simulated prices");
-    }
+  fetchRealPrices:async()=>{
+    try{
+      const ids=Object.values(GID).join(",");
+      const r=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`,{cache:"no-store"});
+      if(!r.ok)return;
+      const data=await r.json();
+      const np={...get().prices};
+      Object.entries(GID).forEach(([sym,id])=>{if(data[id]?.usd)np[sym]=data[id].usd;});
+      set({prices:np});
+    }catch(_){}
   },
 
-  // Simulate small price drift between real fetches
-  tickPrices: () => {
-    set((state) => {
-      const newPrices = { ...state.prices };
-      const newCharts = { ...state.charts };
-      Object.keys(COINS).forEach((sym) => {
-        const base  = COINS[sym].price;
-        const drift = (Math.random() - 0.485) * 0.003;
-        newPrices[sym] = Math.max(base * 0.85, Math.min(base * 1.15, newPrices[sym] * (1 + drift)));
-        const arr = [...newCharts[sym].slice(1)];
-        arr.push(newPrices[sym]);
-        newCharts[sym] = arr;
+  tickPrices:()=>{
+    set(state=>{
+      const np={...state.prices}, nc={...state.charts}, nk={...state.candles};
+      const wick=state.wick, nct={...state._ct};
+      let nextWick=wick;
+
+      Object.keys(COINS).forEach(sym=>{
+        const base=COINS[sym].price;
+
+        if(wick&&wick.sym===sym){
+          const elapsed=Date.now()-wick.startAt, half=wick.durationMs/2;
+          if(elapsed<wick.durationMs){
+            if(elapsed<half){const pct=elapsed/half;np[sym]=wick.startPrice+(wick.targetPrice-wick.startPrice)*pct;}
+            else{const pct=(elapsed-half)/half;np[sym]=wick.targetPrice+(wick.startPrice-wick.targetPrice)*pct;}
+          }else{np[sym]=wick.startPrice;nextWick=null;}
+        }else{
+          const drift=(Math.random()-.485)*.003;
+          np[sym]=Math.max(base*.85,Math.min(base*1.15,(np[sym]||base)*(1+drift)));
+        }
+
+        const arr=[...(nc[sym]||[]).slice(1)]; arr.push(np[sym]); nc[sym]=arr;
+
+        const canArr=[...(nk[sym]||[])];
+        if(canArr.length>0){
+          const last={...canArr[canArr.length-1]};
+          last.c=np[sym]; last.h=Math.max(last.h,np[sym]); last.l=Math.min(last.l,np[sym]);
+          if(wick&&wick.sym===sym){last.h=Math.max(last.h,wick.targetPrice);last.l=Math.min(last.l,wick.targetPrice);}
+          canArr[canArr.length-1]=last;
+          nct[sym]=(nct[sym]||0)+1;
+          if(nct[sym]>=30){
+            canArr.push({t:Date.now(),o:np[sym],h:np[sym],l:np[sym],c:np[sym]});
+            if(canArr.length>120)canArr.shift();
+            nct[sym]=0;
+          }
+          nk[sym]=canArr;
+        }
       });
-      return { prices: newPrices, charts: newCharts };
+      return{prices:np,charts:nc,candles:nk,wick:nextWick,_ct:nct};
     });
   },
 
-  // ── Signals ───────────────────────────────────────────────
-  signals: { ...SIGNALS_INIT },
-  addSignal: (code, data) =>
-    set((s) => ({ signals: { ...s.signals, [code]: data } })),
+  signals:{...SIGNALS_INIT},
+  addSignal:(code,data)=>set(s=>({signals:{...s.signals,[code]:data}})),
 
-  // ── Active Trades ─────────────────────────────────────────
-  activeTrades: [],
-  addTrade:    (t)  => set((s) => ({ activeTrades: [...s.activeTrades, t] })),
-  removeTrade: (id) => set((s) => ({ activeTrades: s.activeTrades.filter((t) => t.id !== id) })),
+  activeTrades:[],
+  addTrade:(t)=>set(s=>({activeTrades:[...s.activeTrades,t]})),
+  removeTrade:(id)=>set(s=>({activeTrades:s.activeTrades.filter(t=>t.id!==id)})),
 
-  // ── Order History ─────────────────────────────────────────
-  orderHistory: [...ORDER_HISTORY_INIT],
-  addOrder: (o) => set((s) => ({ orderHistory: [o, ...s.orderHistory] })),
-
-  // ── Transactions ──────────────────────────────────────────
-  txHistory: [...TX_HISTORY_INIT],
-  addTx: (tx) => set((s) => ({ txHistory: [tx, ...s.txHistory] })),
-
-  // ── Notifications ─────────────────────────────────────────
-  notifs: [...NOTIFS_INIT],
-  markNotifRead: (id) => set((s) => ({ notifs: s.notifs.map((n) => n.id === id ? { ...n, read: true } : n) })),
-  markAllRead:   ()   => set((s) => ({ notifs: s.notifs.map((n) => ({ ...n, read: true })) })),
-  addNotif:      (n)  => set((s) => ({ notifs: [n, ...s.notifs] })),
-
-  // ── Banners ───────────────────────────────────────────────
-  banners:      [...BANNERS_INIT],
-  addBanner:    (b)  => set((s) => ({ banners: [...s.banners, b] })),
-  toggleBanner: (id) => set((s) => ({ banners: s.banners.map((b) => b.id === id ? { ...b, active: !b.active } : b) })),
-  deleteBanner: (id) => set((s) => ({ banners: s.banners.filter((b) => b.id !== id) })),
-
-  // ── Toast ─────────────────────────────────────────────────
-  toasts: [],
-  addToast: (msg, type = "info") => {
-    const id = Date.now() + Math.random();
-    set((s) => ({ toasts: [...s.toasts, { id, msg, type }] }));
-    setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 3500);
+  futPos:[],
+  openFuture:(pos)=>set(s=>({futPos:[...s.futPos,pos]})),
+  closeFuture:(id,exitPrice,reason="CLOSED")=>{
+    const{futPos,user,setUser,orderHistory,addToast}=get();
+    const pos=futPos.find(p=>p.id===id); if(!pos)return;
+    const pnl=pos.side==="LONG"?(exitPrice-pos.entry)*pos.qty*pos.leverage:(pos.entry-exitPrice)*pos.qty*pos.leverage;
+    const pnlPct=(pnl/pos.margin)*100;
+    if(user)setUser({...user,tradingBalance:Math.max(0,(user.tradingBalance||0)+pnl)});
+    set({
+      futPos:futPos.filter(p=>p.id!==id),
+      orderHistory:[{id:pos.id,pair:pos.pair,coin:pos.coin,type:"Futures",side:pos.side,entryPrice:pos.entry,exitPrice,qty:pos.qty,leverage:pos.leverage,margin:pos.margin,pnl:parseFloat(pnl.toFixed(2)),pnlPct:parseFloat(pnlPct.toFixed(2)),status:reason,openTime:pos.openTime,closeTime:new Date().toLocaleString("en-US",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})},...orderHistory],
+    });
+    if(reason==="LIQUIDATED")addToast(`LIQUIDATED: ${pos.pair} -$${pos.margin.toFixed(2)}`,"err");
+    else addToast(`Closed ${pos.pair} ${pnl>=0?"+":""}$${pnl.toFixed(2)}`,"ok");
   },
-  removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
-  // ── Admin data ────────────────────────────────────────────
-  adminUsers:            [],
-  setAdminUsers:         (u) => set({ adminUsers: u }),
-  depositRequests:       [],
-  setDepositRequests:    (d) => set({ depositRequests: d }),
-  withdrawalRequests:    [],
-  setWithdrawalRequests: (w) => set({ withdrawalRequests: w }),
-  adminCodes:            [],
-  prependAdminCode:      (c) => set((s) => ({ adminCodes: [c, ...s.adminCodes] })),
+  orderHistory:[...ORDER_HISTORY_INIT],
+  addOrder:(o)=>set(s=>({orderHistory:[o,...s.orderHistory]})),
+  txHistory:[...TX_INIT],
+  addTx:(tx)=>set(s=>({txHistory:[tx,...s.txHistory]})),
+  notifs:[...NOTIFS_INIT],
+  markRead:(id)=>set(s=>({notifs:s.notifs.map(n=>n.id===id?{...n,read:true}:n)})),
+  markAllRead:()=>set(s=>({notifs:s.notifs.map(n=>({...n,read:true}))})),
+  addNotif:(n)=>set(s=>({notifs:[n,...s.notifs]})),
+  banners:[...BANNERS_INIT],
+  addBanner:(b)=>set(s=>({banners:[...s.banners,b]})),
+  toggleBanner:(id)=>set(s=>({banners:s.banners.map(b=>b.id===id?{...b,active:!b.active}:b)})),
+  deleteBanner:(id)=>set(s=>({banners:s.banners.filter(b=>b.id!==id)})),
+  toasts:[],
+  addToast:(msg,type="info")=>{
+    const id=Date.now()+Math.random();
+    set(s=>({toasts:[...s.toasts,{id,msg,type}]}));
+    setTimeout(()=>set(s=>({toasts:s.toasts.filter(t=>t.id!==id)})),4000);
+  },
+  removeToast:(id)=>set(s=>({toasts:s.toasts.filter(t=>t.id!==id)})),
+
+  // ── Funding → Trading (no fee, 20-day freeze on trading balance) ──
+  transferToTrading:(amount)=>{
+    const{user,setUser,addTx,addToast}=get();
+    if(!user||amount<=0||amount>(user.fundingBalance||0)){
+      addToast("Insufficient funding balance","err"); return;
+    }
+    const freeze = Date.now() + FREEZE_MS;
+    setUser({
+      ...user,
+      fundingBalance: (user.fundingBalance||0) - amount,
+      tradingBalance: (user.tradingBalance||0) + amount,
+      tradingFreezeUntil: freeze,
+    });
+    addTx({
+      id:"tx"+Date.now(), type:"transfer_in", wallet:"trading",
+      amount, fee:0, net:amount,
+      note:"Funding → Trading (20-day freeze)",
+      status:"completed", date:new Date().toLocaleDateString(),
+    });
+    addToast(`$${amount.toFixed(2)} moved to Trading. Frozen 20 days.`,"info");
+  },
+
+  // ── Trading → Funding (25% fee, deducted from amount sent) ──
+  // No freeze check — users can always move money OUT of trading back to funding
+  transferToFunding:(amount)=>{
+    const{user,setUser,addTx,addToast}=get();
+    if(!user)return;
+    if(amount<=0||amount>(user.tradingBalance||0)){
+      addToast("Insufficient trading balance","err"); return;
+    }
+    // 25% fee on the amount being transferred
+    const fee = amount * TRADE_OUT_FEE;
+    const net  = amount - fee;  // what lands in Funding Account
+    setUser({
+      ...user,
+      tradingBalance:  (user.tradingBalance||0)  - amount,
+      fundingBalance:  (user.fundingBalance||0)  + net,
+    });
+    addTx({
+      id:"tx"+Date.now(), type:"transfer_out", wallet:"funding",
+      amount, fee, net,
+      note:"Trading → Funding (25% fee)",
+      status:"completed", date:new Date().toLocaleDateString(),
+    });
+    addToast(`$${net.toFixed(2)} added to Funding after 25% fee ($${fee.toFixed(2)})`, "ok");
+  },
 }));

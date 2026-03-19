@@ -1,310 +1,332 @@
 import { useState, useRef, useCallback } from "react";
 import { useStore } from "@/lib/store";
-import { COINS } from "@/lib/data";
-import CoinIcon  from "@/components/ui/CoinIcon";
-import Countdown from "@/components/ui/Countdown";
+import { COINS, PAIRS, fmtP } from "@/lib/data";
+import CoinIcon          from "@/components/ui/CoinIcon";
+import TradingViewChart  from "@/components/ui/TradingViewChart";
+import Countdown         from "@/components/ui/Countdown";
 
-function fmt(sym, price) {
-  if (!price) return "0.00";
-  if (price < 1) return price.toFixed(4);
-  if (price >= 1000) return (price / 1000).toFixed(2) + "K";
-  return price.toFixed(2);
+// Ineligible popup for Buy Long / Sell Short
+function IneligibleModal({ onClose }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.82)", backdropFilter:"blur(6px)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div style={{ background:"var(--ink3)", border:"1px solid rgba(255,59,92,.3)", borderRadius:22, padding:28, width:"100%", maxWidth:360, textAlign:"center", animation:"fadeUp .35s cubic-bezier(.22,1,.36,1) both" }}>
+        <div style={{ fontSize:52, marginBottom:14 }}>🚫</div>
+        <div style={{ fontWeight:900, fontSize:18, marginBottom:10 }}>Not Eligible for Trading</div>
+        <div style={{ background:"rgba(255,59,92,.08)", border:"1px solid rgba(255,59,92,.2)", borderRadius:14, padding:"14px 16px", marginBottom:18, fontSize:13, color:"var(--t2)", lineHeight:1.7 }}>
+          ⚠️ Contract trading requires a minimum deposit of <strong style={{ color:"var(--dn)" }}>$3,000</strong>.<br/>
+          Please deposit the required amount to unlock trading.
+        </div>
+        <button className="btn btn-gold btn-block" onClick={onClose}>Got It</button>
+      </div>
+    </div>
+  );
 }
 
-export default function TradePage() {
-  const {
-    user, signals, prices,
-    activeTrades, addTrade, removeTrade,
-    orderHistory, addOrder,
-    addToast, addTx,
-  } = useStore();
+// Copy Trading signal input screen
+function CopyTradingScreen({ onBack }) {
+  const { user, signals, prices, activeTrades, addTrade, removeTrade, orderHistory, addOrder, addToast, addTx, setUser } = useStore();
+  const [code, setCode]   = useState("");
+  const [busy, setBusy]   = useState(false);
+  const [err,  setErr]    = useState("");
+  const [ok,   setOk]     = useState("");
+  const [tab,  setTab]    = useState("open");
+  const used = useRef(new Set());
+  const tradeBal = user.tradingBalance ?? 0;
 
-  const [code,    setCode]    = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err,     setErr]     = useState("");
-  const [ok,      setOk]      = useState("");
-  const usedRef = useRef(new Set());
-
-  // ── Validate & submit signal code ──────────────────────
   const submit = () => {
     const c = code.trim().toUpperCase();
     setErr(""); setOk("");
-
-    if (!c)                         { setErr("Please enter a signal code."); return; }
-    if (usedRef.current.has(c))     { setErr("You have already used this code."); return; }
-
+    if (!c)              { setErr("Enter a signal code."); return; }
+    if (tradeBal <= 0)   { setErr("Transfer funds to Trading Account first."); return; }
+    if (used.current.has(c)) { setErr("Already used this code."); return; }
     const sig = signals[c];
-    if (!sig)                       { setErr("Invalid signal code. Please check and try again."); return; }
-    if (Date.now() - sig.created > sig.ttl) { setErr("This signal code has expired."); return; }
-
-    setLoading(true);
+    if (!sig)            { setErr("Invalid signal code. Check WhatsApp group."); return; }
+    if (Date.now() - sig.created > sig.ttl) { setErr("Signal code has expired."); return; }
+    setBusy(true);
     setTimeout(() => {
-      const profit = user.tier.price * 0.01;
-      const trade = {
-        id:     "t" + Date.now(),
-        pair:   sig.pair,
-        coin:   sig.coin,
-        code:   c,
-        profit,
-        entry:  new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      };
-      usedRef.current.add(c);
-      addTrade(trade);
-      setCode("");
-      setOk(`✓ Trade opened! You will earn +$${profit.toFixed(2)} in 5 minutes.`);
-      addToast(`Trade started: ${sig.pair}`, "ok");
-      setLoading(false);
-    }, 600);
+      const profit = user.tier.profit ?? 2;
+      const entry  = prices[sig.coin] ?? COINS[sig.coin]?.price ?? 0;
+      addTrade({ id:"t"+Date.now(), pair:sig.pair, coin:sig.coin, code:c, profit, side:sig.side||"BUY", entry, qty:parseFloat((profit/(entry*.01||1)).toFixed(6)), openTime:new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) });
+      used.current.add(c); setCode("");
+      setOk(`${sig.side||"BUY"} signal confirmed — +$${profit.toFixed(2)} in 5 minutes`);
+      addToast(`Copy Trade: ${sig.pair} ${sig.side||"BUY"}`, "ok");
+      setBusy(false);
+    }, 700);
   };
 
-  // ── Trade completes after countdown ────────────────────
-  const completeTrade = useCallback((tradeId) => {
-    const trade = activeTrades.find((t) => t.id === tradeId);
-    if (!trade) return;
-    const order = {
-      id:        trade.id,
-      pair:      trade.pair,
-      coin:      trade.coin,
-      code:      trade.code,
-      profit:    trade.profit,
-      tierPrice: user.tier.price,
-      startTime: trade.entry,
-      endTime:   new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      date:      new Date().toLocaleDateString(),
-    };
-    addOrder(order);
-    removeTrade(tradeId);
-    addTx({ id: "tx" + Date.now(), type: "trade_profit", amount: trade.profit, coin: trade.pair, status: "completed", date: new Date().toLocaleDateString() });
-    addToast(`+$${trade.profit.toFixed(2)} earned — ${trade.pair} ✓`, "ok");
-  }, [activeTrades, user.tier.price, addOrder, removeTrade, addTx, addToast]);
+  const complete = useCallback(id => {
+    const t = activeTrades.find(x => x.id === id); if (!t) return;
+    const exit = prices[t.coin] ?? COINS[t.coin]?.price ?? 0;
+    setUser({ ...user, tradingBalance:(user.tradingBalance||0)+t.profit, totalProfit:(user.totalProfit||0)+t.profit, totalTrades:(user.totalTrades||0)+1 });
+    addOrder({ id:t.id, pair:t.pair, coin:t.coin, type:"Copy Trade", side:t.side||"BUY", code:t.code, entryPrice:t.entry, exitPrice:exit, qty:t.qty, leverage:1, margin:user.tier?.price??200, pnl:t.profit, pnlPct:1.0, status:"CLOSED", openTime:t.openTime, closeTime:new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) });
+    removeTrade(id);
+    addTx({ id:"tx"+Date.now(), type:"trade_profit", wallet:"trading", amount:t.profit, fee:0, net:t.profit, coin:t.pair, status:"completed", date:new Date().toLocaleDateString() });
+    addToast(`+$${t.profit.toFixed(2)} added to Trading Account`, "ok");
+  }, [activeTrades, prices, user, setUser, addOrder, removeTrade, addTx, addToast]);
+
+  const copyOrders = orderHistory.filter(o => o.type === "Copy Trade");
 
   return (
     <div>
-      {/* Header */}
       <div className="hdr">
-        <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.3px" }}>Copy Trade</span>
-        {activeTrades.length > 0 && (
-          <span className="badge badge-cyan" style={{ marginLeft: "auto" }}>
-            {activeTrades.length} live
-          </span>
-        )}
+        <button onClick={onBack} style={{ color:"var(--t2)", display:"flex", alignItems:"center", gap:4, fontSize:13 }}>
+          <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>Back
+        </button>
+        <span style={{ fontWeight:800, fontSize:17 }}>Copy Trading</span>
+        {activeTrades.length > 0 && <span className="badge b-bl" style={{ marginLeft:"auto" }}>{activeTrades.length} live</span>}
       </div>
-
-      <div style={{ padding: "16px" }}>
-
-        {/* ── Signal code input card ──────────────────────── */}
-        <div className="card" style={{ padding: 18, marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 12,
-              background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.2)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 15 }}>Enter Signal Code</div>
-              <div style={{ fontSize: 12, color: "var(--c2)", marginTop: 1 }}>From WhatsApp / Telegram group</div>
-            </div>
+      <div style={{ padding:"12px 16px 0" }}>
+        <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:14, padding:"12px 16px", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", marginBottom:3, letterSpacing:".8px" }}>TRADING ACCOUNT</div>
+            <div style={{ fontSize:22, fontWeight:900, fontFamily:"var(--m)", color:"var(--up)" }}>${tradeBal.toLocaleString("en-US",{minimumFractionDigits:2})}</div>
           </div>
+          {tradeBal <= 0 && <button className="btn btn-gold btn-sm" onClick={() => useStore.getState().setPage("assets")}>Fund →</button>}
+        </div>
 
-          {/* Input */}
-          <input
-            className="inp inp-mono"
-            placeholder="e.g. BTC9421"
-            value={code}
-            onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(""); setOk(""); }}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            style={{ marginBottom: 12, borderColor: err ? "var(--red)" : "" }}
-          />
-
-          {/* Error */}
-          {err && (
-            <div style={{
-              background: "rgba(255,69,96,0.08)", border: "1px solid rgba(255,69,96,0.2)",
-              borderRadius: 10, padding: "10px 14px", marginBottom: 12,
-              color: "var(--red)", fontSize: 13, display: "flex", alignItems: "center", gap: 8,
-            }}>
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              {err}
-            </div>
-          )}
-
-          {/* Success */}
-          {ok && (
-            <div style={{
-              background: "rgba(0,214,143,0.08)", border: "1px solid rgba(0,214,143,0.2)",
-              borderRadius: 10, padding: "10px 14px", marginBottom: 12,
-              color: "var(--green)", fontSize: 13,
-            }}>
-              {ok}
-            </div>
-          )}
-
-          {/* Submit button */}
-          <button
-            className="btn btn-gold btn-block"
-            onClick={submit}
-            disabled={loading || !code.trim()}
-            style={{ fontSize: 15 }}
-          >
-            {loading
-              ? <><span className="spin" /> Validating...</>
-              : "Submit Signal Code"
-            }
+        <div className="card" style={{ padding:20, marginBottom:16 }}>
+          <input className="inp" style={{ fontFamily:"var(--m)", letterSpacing:3, textTransform:"uppercase", fontSize:18, fontWeight:700, textAlign:"center", marginBottom:12, borderColor:err?"var(--dn)":"" }}
+            placeholder="E.G.  BTC9421" value={code}
+            onChange={e => { setCode(e.target.value.toUpperCase()); setErr(""); setOk(""); }}
+            onKeyDown={e => e.key==="Enter" && submit()}/>
+          {err && <div style={{ background:"rgba(255,59,92,.08)", border:"1px solid rgba(255,59,92,.2)", borderRadius:10, padding:"10px 14px", marginBottom:12, color:"var(--dn)", fontSize:13 }}>{err}</div>}
+          {ok  && <div style={{ background:"rgba(0,200,150,.08)", border:"1px solid rgba(0,200,150,.2)", borderRadius:10, padding:"10px 14px", marginBottom:12, color:"var(--up)", fontSize:13 }}>{ok}</div>}
+          <button className="btn btn-gold btn-block" style={{ fontSize:15, background:"linear-gradient(135deg,#a855f7,#7c3aed)" }} onClick={submit} disabled={busy||!code.trim()}>
+            {busy ? <><span className="spin spin-w"/>Validating...</> : "Submit Signal Code"}
           </button>
-
-          {/* Demo hint */}
-          <div style={{
-            marginTop: 12, padding: "10px 14px",
-            background: "rgba(0,198,255,0.05)", border: "1px solid rgba(0,198,255,0.12)",
-            borderRadius: 10,
-          }}>
-            <div style={{ fontSize: 11, color: "var(--cyan)", fontFamily: "var(--fm)", fontWeight: 700, marginBottom: 3, letterSpacing: "0.5px" }}>
-              DEMO CODES
-            </div>
-            <div style={{ fontSize: 12, color: "var(--c2)", fontFamily: "var(--fm)" }}>
-              BTC9421 · ETH7364 · SOL1982 · BNB4471
-            </div>
+          <div style={{ marginTop:12, background:"rgba(45,156,255,.06)", border:"1px solid rgba(45,156,255,.12)", borderRadius:10, padding:"10px 14px" }}>
+            <div style={{ fontSize:11, color:"var(--blue)", fontFamily:"var(--m)", fontWeight:700, marginBottom:4 }}>DEMO CODES</div>
+            <div style={{ fontSize:11, color:"var(--t2)", fontFamily:"var(--m)", letterSpacing:1 }}>BTC9421 · ETH7364 · SOL1982 · BNB4471</div>
           </div>
         </div>
 
-        {/* ── Active trades ───────────────────────────────── */}
-        {activeTrades.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.3px" }}>Active Trades</span>
-              <span className="badge badge-cyan">{activeTrades.length}</span>
-            </div>
-
-            {activeTrades.map((trade) => {
-              const coin  = COINS[trade.coin];
-              const price = prices[trade.coin] ?? coin?.price ?? 0;
-              return (
-                <div key={trade.id} className="card2" style={{
-                  padding: 16, marginBottom: 10,
-                  border: "1px solid rgba(0,198,255,0.2)",
-                  background: "linear-gradient(135deg,rgba(0,198,255,0.04),rgba(0,100,200,0.02))",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    {/* Left */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {/* Pair + code + LIVE badge */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-                        <CoinIcon sym={trade.coin} size={32} />
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 15 }}>{trade.pair}</div>
-                          <div style={{ fontSize: 11, color: "var(--c2)", fontFamily: "var(--fm)" }}>{trade.code}</div>
-                        </div>
-                        <span className="badge badge-cyan" style={{ marginLeft: "auto" }}>
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan)", display: "inline-block", animation: "blink 1s infinite" }} />
-                          {" "}LIVE
-                        </span>
-                      </div>
-
-                      {/* Stats */}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                        <div style={{ background: "var(--bg2)", borderRadius: 10, padding: "10px 12px" }}>
-                          <div style={{ fontSize: 10, color: "var(--c3)", fontFamily: "var(--fm)", marginBottom: 3, letterSpacing: "0.5px" }}>ENTRY PRICE</div>
-                          <div style={{ fontFamily: "var(--fm)", fontSize: 13, fontWeight: 700 }}>${fmt(trade.coin, price)}</div>
-                        </div>
-                        <div style={{ background: "rgba(0,214,143,0.06)", borderRadius: 10, padding: "10px 12px", border: "1px solid rgba(0,214,143,0.1)" }}>
-                          <div style={{ fontSize: 10, color: "var(--c3)", fontFamily: "var(--fm)", marginBottom: 3, letterSpacing: "0.5px" }}>PROFIT</div>
-                          <div style={{ fontFamily: "var(--fm)", fontSize: 14, fontWeight: 800, color: "var(--green)" }}>+${trade.profit.toFixed(2)}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Countdown */}
-                    <div style={{ marginLeft: 14, flexShrink: 0 }}>
-                      <Countdown totalSeconds={300} onDone={() => completeTrade(trade.id)} />
-                    </div>
+        {activeTrades.length > 0 && activeTrades.map(t => {
+          const p = prices[t.coin] ?? COINS[t.coin]?.price ?? 0;
+          return (
+            <div key={t.id} className="card2" style={{ padding:16, marginBottom:10, borderColor:"rgba(45,156,255,.2)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                <CoinIcon sym={t.coin} size={32}/>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ fontWeight:800, fontSize:15 }}>{t.pair}</span>
+                    <span className={`badge ${t.side==="BUY"?"b-up":"b-dn"}`} style={{ fontSize:10 }}>{t.side}</span>
                   </div>
+                  <div style={{ fontSize:11, color:"var(--t2)", fontFamily:"var(--m)", marginTop:2 }}>Code: {t.code}</div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Order history ───────────────────────────────── */}
-        <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.3px" }}>Order History</span>
-            <span style={{ fontSize: 12, color: "var(--gold)", fontWeight: 600 }}>{orderHistory.length} completed</span>
-          </div>
-
-          <div className="card" style={{ overflow: "hidden" }}>
-            {/* Table header */}
-            <div style={{
-              display: "grid", gridTemplateColumns: "1fr 68px 80px",
-              gap: 8, padding: "11px 16px 9px",
-              borderBottom: "1px solid var(--b1)",
-            }}>
-              {["PAIR", "STATUS", "PROFIT"].map((h) => (
-                <div key={h} style={{
-                  fontSize: 10, color: "var(--c3)", fontFamily: "var(--fm)",
-                  letterSpacing: "0.8px",
-                  textAlign: h === "PROFIT" ? "right" : h === "STATUS" ? "center" : "left",
-                }}>
-                  {h}
-                </div>
-              ))}
-            </div>
-
-            {orderHistory.length === 0 ? (
-              <div className="empty" style={{ padding: "32px 20px" }}>
-                <div className="empty-icon">📋</div>
-                <p>No completed trades yet.<br />Enter a signal code to start.</p>
+                <Countdown totalSeconds={300} onDone={() => complete(t.id)}/>
               </div>
-            ) : (
-              <div style={{ padding: "0 16px" }}>
-                {orderHistory.slice(0, 20).map((order, i) => (
-                  <div
-                    key={order.id}
-                    style={{
-                      display: "grid", gridTemplateColumns: "1fr 68px 80px",
-                      gap: 8, alignItems: "center",
-                      padding: "12px 0",
-                      borderBottom: i < Math.min(19, orderHistory.length - 1) ? "1px solid var(--b1)" : "none",
-                    }}
-                  >
-                    {/* Pair */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                      <CoinIcon sym={order.coin} size={30} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>{order.pair}</div>
-                        <div style={{ fontSize: 10, color: "var(--c3)", fontFamily: "var(--fm)", marginTop: 1 }}>
-                          {order.startTime ?? order.date}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Status */}
-                    <div style={{ textAlign: "center" }}>
-                      <span className="badge badge-up" style={{ fontSize: 10, padding: "3px 7px" }}>Done</span>
-                    </div>
-
-                    {/* Profit */}
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ color: "var(--green)", fontFamily: "var(--fm)", fontSize: 14, fontWeight: 800 }}>
-                        +${order.profit.toFixed(2)}
-                      </div>
-                      <div style={{ fontSize: 10, color: "var(--c3)", fontFamily: "var(--fm)", marginTop: 1 }}>
-                        {order.code}
-                      </div>
-                    </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+                {[["ENTRY","$"+fmtP(t.coin,t.entry),"var(--t2)"],["CURRENT","$"+fmtP(t.coin,p),"var(--t1)"],["EST. PNL","+$"+t.profit.toFixed(2),"var(--up)"]].map(([l,v,c]) => (
+                  <div key={l} style={{ background:"var(--ink2)", borderRadius:10, padding:"10px 12px" }}>
+                    <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", marginBottom:3 }}>{l}</div>
+                    <div style={{ fontFamily:"var(--m)", fontSize:13, fontWeight:700, color:c }}>{v}</div>
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+          );
+        })}
+
+        <div className="seg" style={{ marginBottom:14 }}>
+          <button className={`seg-btn${tab==="open"?" on":""}`} onClick={() => setTab("open")}>Open ({activeTrades.length})</button>
+          <button className={`seg-btn${tab==="history"?" on":""}`} onClick={() => setTab("history")}>History ({copyOrders.length})</button>
+        </div>
+
+        {tab === "history" && (
+          <div className="card" style={{ overflow:"hidden" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1.2fr .6fr .8fr .8fr .7fr .7fr", gap:4, padding:"9px 14px", borderBottom:"1px solid var(--ln)", background:"var(--ink4)" }}>
+              {["Contract","Side","Entry","Exit","PnL","Status"].map((h,i) => (
+                <div key={h} style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", textAlign:i>1?"right":"left" }}>{h}</div>
+              ))}
+            </div>
+            {copyOrders.length === 0
+              ? <div className="empty" style={{ padding:"32px 16px" }}><div className="ei">📋</div><p>No closed trades yet</p></div>
+              : copyOrders.slice(0,30).map((o,i) => {
+                  const pp = o.pnl >= 0;
+                  return (
+                    <div key={o.id} style={{ display:"grid", gridTemplateColumns:"1.2fr .6fr .8fr .8fr .7fr .7fr", gap:4, padding:"11px 14px", borderBottom:i<copyOrders.length-1?"1px solid var(--ln)":"none", alignItems:"center" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <CoinIcon sym={o.coin} size={22}/>
+                        <div><div style={{ fontSize:12, fontWeight:700 }}>{o.pair}</div><div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)" }}>{o.openTime}</div></div>
+                      </div>
+                      <div style={{ textAlign:"right" }}><span className={`badge ${o.side==="BUY"||o.side==="LONG"?"b-up":"b-dn"}`} style={{ fontSize:9, padding:"2px 6px" }}>{o.side}</span></div>
+                      <div style={{ textAlign:"right", fontFamily:"var(--m)", fontSize:11, color:"var(--t2)" }}>${fmtP(o.coin,o.entryPrice)}</div>
+                      <div style={{ textAlign:"right", fontFamily:"var(--m)", fontSize:11 }}>${fmtP(o.coin,o.exitPrice)}</div>
+                      <div style={{ textAlign:"right", fontFamily:"var(--m)", fontSize:12, fontWeight:700, color:pp?"var(--up)":"var(--dn)" }}>{pp?"+":""}{o.pnl?.toFixed(2)}</div>
+                      <div style={{ textAlign:"right" }}><span className={`badge ${o.status==="CLOSED"?"b-dim":"b-dn"}`} style={{ fontSize:9, padding:"2px 6px" }}>{o.status}</span></div>
+                    </div>
+                  );
+                })
+            }
+          </div>
+        )}
+        {tab === "open" && activeTrades.length === 0 && (
+          <div className="empty"><div className="ei">⚡</div><p style={{ fontSize:13 }}>No open trades.<br/>Enter a signal code above.</p></div>
+        )}
+        <div style={{ height:16 }}/>
+      </div>
+    </div>
+  );
+}
+
+// Records screen
+function RecordsScreen({ onBack }) {
+  const { orderHistory } = useStore();
+  const [tab, setTab] = useState("contract");
+  const contractOrders = orderHistory.filter(o => o.type === "Futures");
+  const copyOrders     = orderHistory.filter(o => o.type === "Copy Trade");
+  const list = tab === "contract" ? contractOrders : copyOrders;
+
+  return (
+    <div>
+      <div className="hdr">
+        <button onClick={onBack} style={{ color:"var(--t2)", display:"flex", alignItems:"center", gap:4, fontSize:13 }}>
+          <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>Back
+        </button>
+        <span style={{ fontWeight:800, fontSize:17 }}>Trade Details</span>
+      </div>
+      <div style={{ padding:"0 16px" }}>
+        <div style={{ display:"flex", borderBottom:"1px solid var(--ln)", marginBottom:16, marginTop:4 }}>
+          {["contract","copy"].map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{ flex:1, padding:"12px 0", background:"none", border:"none", borderBottom:`2.5px solid ${tab===t?"var(--pu)":"transparent"}`, color:tab===t?"var(--pu)":"var(--t3)", fontFamily:"var(--f)", fontSize:14, fontWeight:700, cursor:"pointer", transition:"all .2s" }}>
+              {t === "contract" ? "Contract Trade" : "Copy Trading"}
+            </button>
+          ))}
+        </div>
+        {list.length === 0
+          ? <div className="empty" style={{ paddingTop:60 }}><div className="ei">📭</div><p>No Data</p></div>
+          : list.map((o, i) => {
+              const pp = o.pnl >= 0;
+              return (
+                <div key={o.id} style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:14, padding:14, marginBottom:10 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <CoinIcon sym={o.coin} size={32}/>
+                      <div>
+                        <div style={{ fontWeight:700, fontSize:14 }}>{o.pair}</div>
+                        <div style={{ fontSize:11, color:"var(--t3)", fontFamily:"var(--m)", marginTop:1 }}>{o.openTime}</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontFamily:"var(--m)", fontSize:16, fontWeight:900, color:pp?"var(--up)":"var(--dn)" }}>{pp?"+":""}{o.pnl?.toFixed(2)} USDT</div>
+                      <span className={`badge ${o.status==="CLOSED"||o.status==="closed"?"b-dim":"b-dn"}`} style={{ fontSize:9, marginTop:4, display:"inline-block" }}>{o.status}</span>
+                    </div>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+                    {[["Side",o.side,o.side==="BUY"||o.side==="LONG"?"var(--up)":"var(--dn)"],["Entry","$"+fmtP(o.coin,o.entryPrice),"var(--t2)"],["Exit","$"+fmtP(o.coin,o.exitPrice),"var(--t1)"]].map(([l,v,c]) => (
+                      <div key={l} style={{ background:"var(--ink2)", borderRadius:8, padding:"8px 10px" }}>
+                        <div style={{ fontSize:9, color:"var(--t3)", fontFamily:"var(--m)", marginBottom:2 }}>{l}</div>
+                        <div style={{ fontSize:12, fontWeight:700, color:c }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+        }
+        <div style={{ height:16 }}/>
+      </div>
+    </div>
+  );
+}
+
+// Main TradePage
+export default function TradePage() {
+  const { prices } = useStore();
+  const [sym,        setSym]        = useState("BTC");
+  const [period,     setPeriod]     = useState("60");
+  const [showPopup,  setShowPopup]  = useState(false);
+  const [screen,     setScreen]     = useState(null); // "copy" | "records"
+
+  const coin = COINS[sym];
+  const lp   = prices[sym] ?? coin?.price ?? 0;
+  const up   = (coin?.change ?? 0) >= 0;
+
+  const PERIODS = [
+    { label:"1m",  val:"1"   },
+    { label:"5m",  val:"5"   },
+    { label:"15m", val:"15"  },
+    { label:"1h",  val:"60"  },
+    { label:"4h",  val:"240" },
+    { label:"1d",  val:"D"   },
+  ];
+
+  if (screen === "copy")    return <CopyTradingScreen onBack={() => setScreen(null)}/>;
+  if (screen === "records") return <RecordsScreen     onBack={() => setScreen(null)}/>;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
+      {showPopup && <IneligibleModal onClose={() => setShowPopup(false)}/>}
+
+      {/* Pair selector header */}
+      <div style={{ flexShrink:0, padding:"10px 16px 0" }}>
+        <div style={{ display:"flex", overflowX:"auto", gap:6, paddingBottom:8 }}>
+          {PAIRS.map(p => {
+            const s = p.split("/")[0];
+            return (
+              <button key={p} onClick={() => setSym(s)}
+                style={{ padding:"7px 14px", borderRadius:20, flexShrink:0, border:`1.5px solid ${s===sym?"var(--gold)":"var(--ln)"}`, background:s===sym?"rgba(240,165,0,.1)":"transparent", color:s===sym?"var(--gold)":"var(--t3)", fontFamily:"var(--m)", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                {p}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Price display */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+          <CoinIcon sym={sym} size={28}/>
+          <div>
+            <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+              <span style={{ fontFamily:"var(--m)", fontSize:26, fontWeight:900, color:up?"var(--up)":"var(--dn)", letterSpacing:"-1px" }}>
+                {fmtP(sym, lp)}
+              </span>
+            </div>
+            <div style={{ fontSize:11, color:"var(--t3)", fontFamily:"var(--m)" }}>
+              ≈ ${fmtP(sym, lp)} &nbsp;
+              <span style={{ color:up?"var(--up)":"var(--dn)" }}>{up?"+":""}{coin?.change?.toFixed(3)}%</span>
+            </div>
           </div>
         </div>
 
-        <div style={{ height: 16 }} />
+        {/* Period tabs */}
+        <div style={{ display:"flex", gap:4, marginBottom:4 }}>
+          {PERIODS.map(p => (
+            <button key={p.val} onClick={() => setPeriod(p.val)}
+              style={{ padding:"5px 10px", borderRadius:6, border:"none", background:period===p.val?"var(--ln2)":"transparent", color:period===p.val?"var(--t1)":"var(--t3)", fontFamily:"var(--m)", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div style={{ borderTop:"1px solid var(--ln)", borderBottom:"1px solid var(--ln)", flexShrink:0 }}>
+        <TradingViewChart sym={sym} interval={period} height={300}/>
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ flexShrink:0, padding:"14px 16px", display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <button onClick={() => setShowPopup(true)}
+            style={{ padding:"15px 0", borderRadius:14, border:"none", background:"linear-gradient(135deg,#00c896,#008f6a)", color:"#000", fontWeight:800, fontSize:16, cursor:"pointer", fontFamily:"var(--f)" }}>
+            Buy Long
+          </button>
+          <button onClick={() => setShowPopup(true)}
+            style={{ padding:"15px 0", borderRadius:14, border:"none", background:"linear-gradient(135deg,#ff3b5c,#c01535)", color:"#fff", fontWeight:800, fontSize:16, cursor:"pointer", fontFamily:"var(--f)" }}>
+            Sell Short
+          </button>
+        </div>
+
+        <button onClick={() => setScreen("copy")}
+          style={{ padding:"14px 0", borderRadius:14, border:"none", background:"linear-gradient(135deg,#a855f7,#7c3aed)", color:"#fff", fontWeight:800, fontSize:15, cursor:"pointer", fontFamily:"var(--f)" }}>
+          Copy Trading
+        </button>
+
+        <button onClick={() => setScreen("records")}
+          style={{ padding:"13px 0", borderRadius:14, border:"1px solid var(--ln2)", background:"var(--ink3)", color:"var(--t1)", fontWeight:700, fontSize:14, cursor:"pointer", fontFamily:"var(--f)" }}>
+          Records
+        </button>
       </div>
     </div>
   );

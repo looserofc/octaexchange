@@ -191,7 +191,7 @@ export default function ForgotPasswordPage() {
             </button>
 
             <p style={{textAlign:"center",fontSize:13,color:"var(--t2)"}}>
-              Remember your password?{" "}
+              {"Remember your password?"}
               <span style={{color:"var(--gold)",cursor:"pointer",fontWeight:700}} onClick={()=>router.push("/")}>Log In</span>
             </p>
           </div>

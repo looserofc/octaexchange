@@ -260,7 +260,7 @@ export default function AuthPage() {
 
         <p style={{ textAlign:"center", fontSize:13, color:"var(--t2)" }}>
           {tab === "login"
-            ? <>Don't have an account? <span style={{ color:"var(--gold)", cursor:"pointer", fontWeight:700 }} onClick={() => { setTab("signup"); setErrs({}); }}>Sign Up</span></>
+            ? <>Don&apos;t have an account? <span style={{ color:"var(--gold)", cursor:"pointer", fontWeight:700 }} onClick={() => { setTab("signup"); setErrs({}); }}>Sign Up</span></>
             : <>Already have an account? <span style={{ color:"var(--gold)", cursor:"pointer", fontWeight:700 }} onClick={() => { setTab("login"); setErrs({}); }}>Log In</span></>
           }
         </p>

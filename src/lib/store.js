@@ -31,16 +31,18 @@ function buildPrices(){const p={};Object.keys(COINS).forEach(k=>{p[k]=COINS[k].p
 export const useStore = create((set,get)=>({
   user:null, setUser:(u)=>set({user:u}), logout:()=>set({user:null}),
   page:"home", setPage:(p)=>set({page:p}),
+  assetsTab:"overview", setAssetsTab:(t)=>set({assetsTab:t}),
+  tradeTab:"copy",       setTradeTab:(t)=>set({tradeTab:t}),
   profileTab:"account", setProfileTab:(t)=>set({profileTab:t}),
-  profileScreen:null, setProfileScreen:(s)=>set({profileScreen:s}),
-  assetsScreen:null, setAssetsScreen:(s)=>set({assetsScreen:s}),
+  profileScreen:null,   setProfileScreen:(s)=>set({profileScreen:s}),
   adminAuthed:false, setAdminAuthed:(v)=>set({adminAuthed:v}),
+  adminRole:null,    setAdminRole:(r)=>set({adminRole:r}),
   showAdmin:false,   setShowAdmin:(v)=>set({showAdmin:v}),
 
   prices:buildPrices(),
   charts:buildCharts(),
   candles:(()=>{const c={};Object.keys(COINS).forEach(k=>{c[k]=buildCandles(k);});return c;})(),
-  _ct:{},
+  _ct:{}, // candle tick counters per sym
 
   wick:null, setWick:(w)=>set({wick:w}),
 
@@ -65,6 +67,7 @@ export const useStore = create((set,get)=>({
       Object.keys(COINS).forEach(sym=>{
         const base=COINS[sym].price;
 
+        // ── Wick animation ────────────────────────
         if(wick&&wick.sym===sym){
           const elapsed=Date.now()-wick.startAt, half=wick.durationMs/2;
           if(elapsed<wick.durationMs){
@@ -76,14 +79,18 @@ export const useStore = create((set,get)=>({
           np[sym]=Math.max(base*.85,Math.min(base*1.15,(np[sym]||base)*(1+drift)));
         }
 
+        // ── Sparkline ─────────────────────────────
         const arr=[...(nc[sym]||[]).slice(1)]; arr.push(np[sym]); nc[sym]=arr;
 
+        // ── OHLC candles ──────────────────────────
         const canArr=[...(nk[sym]||[])];
         if(canArr.length>0){
           const last={...canArr[canArr.length-1]};
           last.c=np[sym]; last.h=Math.max(last.h,np[sym]); last.l=Math.min(last.l,np[sym]);
+          // Inject wick extremes into candle so it shows on chart
           if(wick&&wick.sym===sym){last.h=Math.max(last.h,wick.targetPrice);last.l=Math.min(last.l,wick.targetPrice);}
           canArr[canArr.length-1]=last;
+          // New candle every 30 ticks
           nct[sym]=(nct[sym]||0)+1;
           if(nct[sym]>=30){
             canArr.push({t:Date.now(),o:np[sym],h:np[sym],l:np[sym],c:np[sym]});
@@ -140,50 +147,26 @@ export const useStore = create((set,get)=>({
   },
   removeToast:(id)=>set(s=>({toasts:s.toasts.filter(t=>t.id!==id)})),
 
-  // ── Funding → Trading (no fee, 20-day freeze on trading balance) ──
   transferToTrading:(amount)=>{
     const{user,setUser,addTx,addToast}=get();
-    if(!user||amount<=0||amount>(user.fundingBalance||0)){
-      addToast("Insufficient funding balance","err"); return;
-    }
-    const freeze = Date.now() + FREEZE_MS;
-    setUser({
-      ...user,
-      fundingBalance: (user.fundingBalance||0) - amount,
-      tradingBalance: (user.tradingBalance||0) + amount,
-      tradingFreezeUntil: freeze,
-    });
-    addTx({
-      id:"tx"+Date.now(), type:"transfer_in", wallet:"trading",
-      amount, fee:0, net:amount,
-      note:"Funding → Trading (20-day freeze)",
-      status:"completed", date:new Date().toLocaleDateString(),
-    });
-    addToast(`$${amount.toFixed(2)} moved to Trading. Frozen 20 days.`,"info");
+    if(!user||amount<=0||amount>(user.fundingBalance||0)){addToast("Insufficient funding balance","err");return;}
+    const freeze=Date.now()+FREEZE_MS;
+    setUser({...user,fundingBalance:(user.fundingBalance||0)-amount,tradingBalance:(user.tradingBalance||0)+amount,tradingFreezeUntil:freeze});
+    addTx({id:"tx"+Date.now(),type:"transfer_in",wallet:"trading",amount,fee:0,net:amount,note:"Funding → Trading (20-day freeze)",status:"completed",date:new Date().toLocaleDateString()});
+    addToast(`$${amount} moved. Frozen ${20} days.`,"info");
   },
 
-  // ── Trading → Funding (25% fee, deducted from amount sent) ──
-  // No freeze check — users can always move money OUT of trading back to funding
   transferToFunding:(amount)=>{
     const{user,setUser,addTx,addToast}=get();
     if(!user)return;
-    if(amount<=0||amount>(user.tradingBalance||0)){
-      addToast("Insufficient trading balance","err"); return;
+    if(Date.now()<(user.tradingFreezeUntil||0)){
+      const d=Math.ceil(((user.tradingFreezeUntil||0)-Date.now())/86400000);
+      addToast(`Frozen — ${d} day${d!==1?"s":""} remaining`,"err");return;
     }
-    // 25% fee on the amount being transferred
-    const fee = amount * TRADE_OUT_FEE;
-    const net  = amount - fee;  // what lands in Funding Account
-    setUser({
-      ...user,
-      tradingBalance:  (user.tradingBalance||0)  - amount,
-      fundingBalance:  (user.fundingBalance||0)  + net,
-    });
-    addTx({
-      id:"tx"+Date.now(), type:"transfer_out", wallet:"funding",
-      amount, fee, net,
-      note:"Trading → Funding (25% fee)",
-      status:"completed", date:new Date().toLocaleDateString(),
-    });
-    addToast(`$${net.toFixed(2)} added to Funding after 25% fee ($${fee.toFixed(2)})`, "ok");
+    if(amount<=0||amount>(user.tradingBalance||0)){addToast("Insufficient trading balance","err");return;}
+    const fee=amount*TRADE_OUT_FEE, net=amount-fee;
+    setUser({...user,tradingBalance:(user.tradingBalance||0)-amount,fundingBalance:(user.fundingBalance||0)+net});
+    addTx({id:"tx"+Date.now(),type:"transfer_out",wallet:"funding",amount,fee,net,note:"Trading → Funding (25% fee)",status:"completed",date:new Date().toLocaleDateString()});
+    addToast(`$${net.toFixed(2)} received after 25% fee`,"ok");
   },
 }));

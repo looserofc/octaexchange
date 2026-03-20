@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { PAIRS, COINS, genCode, MOCK_USERS, DEP_REQS, WD_REQS, KYC_REQS, ADMIN_CODES_INIT, getRefLevel } from "@/lib/data";
+import { PAIRS, COINS, genCode, MOCK_USERS, DEP_REQS, WD_REQS, KYC_REQS, ADMIN_CODES_INIT, getRefLevel, REF_LEVELS } from "@/lib/data";
 
 const MENU = [
   {id:"dash",  icon:"📊",label:"Dashboard"},
@@ -56,7 +56,7 @@ function EditModal({ user, onSave, onClose }) {
         <F label="Trading Balance ($)"value={tb}    onChange={setTb}    type="number"/>
         <F label="Total Earned ($)"   value={earn}  onChange={setEarn}  type="number"/>
         <F label="Withdrawn ($)"      value={wd}    onChange={setWd}    type="number"/>
-        <div className="fg"><label className="lbl">Tier</label><select className="inp" value={tier} onChange={e=>setTier(e.target.value)} style={{padding:"10px 14px",fontSize:13}}>{[1,2,3,4,5,6,7,8,9,10].map(n=><option key={n} value={n}>Tier {n}</option>)}</select></div>
+        <div className="fg"><label className="lbl">Tier (Subscription)</label><select className="inp" value={tier} onChange={e=>setTier(e.target.value)} style={{padding:"10px 14px",fontSize:13}}><option value="">No Tier</option>{[1,2,3,4,5,6,7,8,9,10].map(n=><option key={n} value={n}>Tier {n}</option>)}</select><div style={{fontSize:11,color:"var(--t3)",marginTop:4}}>Upgrading tier here will immediately activate it for the user.</div></div>
         <div className="fg"><label className="lbl">KYC Status</label><select className="inp" value={kyc} onChange={e=>setKyc(e.target.value)} style={{padding:"10px 14px",fontSize:13}}>{["none","pending","approved","rejected"].map(s=><option key={s} value={s}>{s}</option>)}</select></div>
         <div style={{display:"flex",gap:10,marginTop:4}}>
           <button className="btn btn-ghost" style={{flex:1}} onClick={onClose}>Cancel</button>
@@ -67,90 +67,9 @@ function EditModal({ user, onSave, onClose }) {
   );
 }
 
-// Referral detail modal
-function ReferralModal({ user, allUsers, onClose }) {
-  const [refOpen, setRefOpen] = useState(false);
-  const refByUser = allUsers.find(u => u.username === user.referredBy);
-  const refCount  = user.referredCount ?? (user.referredMembers?.length ?? 0);
-  const lvInfo    = getRefLevel(refCount);
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",backdropFilter:"blur(4px)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div style={{background:"var(--ink3)",border:"1px solid var(--ln2)",borderRadius:18,padding:24,width:"100%",maxWidth:440,maxHeight:"90dvh",overflowY:"auto"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-          <span style={{fontWeight:800,fontSize:16}}>Referral Info — {user.name}</span>
-          <button onClick={onClose} style={{color:"var(--t3)",fontSize:20}}>✕</button>
-        </div>
-
-        {/* Level */}
-        <div style={{background:`${lvInfo.color}15`,border:`1px solid ${lvInfo.color}40`,borderRadius:14,padding:14,marginBottom:14,display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:44,height:44,borderRadius:12,background:`${lvInfo.color}30`,border:`2px solid ${lvInfo.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--m)",fontSize:11,fontWeight:900,color:lvInfo.color,flexShrink:0}}>
-            {lvInfo.level===0?"—":lvInfo.label}
-          </div>
-          <div>
-            <div style={{fontWeight:800,fontSize:15,color:lvInfo.color}}>{lvInfo.level===0?"No Level":lvInfo.label}</div>
-            <div style={{fontSize:12,color:"var(--t2)",marginTop:2}}>{refCount} successful referrals</div>
-          </div>
-        </div>
-
-        {/* Referred By */}
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:6,fontWeight:700,letterSpacing:".8px"}}>REFERRED BY</div>
-          {refByUser ? (
-            <div style={{background:"var(--ink2)",border:"1px solid var(--ln2)",borderRadius:12,padding:"10px 14px",display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:34,height:34,borderRadius:9,background:"linear-gradient(135deg,var(--blue),#1a6fc4)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:12,flexShrink:0}}>
-                {refByUser.name.split(" ").map(w=>w[0]).join("")}
-              </div>
-              <div>
-                <div style={{fontWeight:700,fontSize:13}}>{refByUser.name}</div>
-                <div style={{fontSize:11,color:"var(--t3)",fontFamily:"var(--m)"}}>@{refByUser.username} · {refByUser.email}</div>
-              </div>
-            </div>
-          ) : (
-            <div style={{background:"var(--ink2)",border:"1px solid var(--ln2)",borderRadius:12,padding:"10px 14px",fontSize:13,color:"var(--t3)"}}>
-              No referrer — direct signup
-            </div>
-          )}
-        </div>
-
-        {/* Referred Members */}
-        <div>
-          <div style={{fontSize:11,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:6,fontWeight:700,letterSpacing:".8px"}}>
-            REFERRED MEMBERS ({(user.referredMembers??[]).length})
-          </div>
-          {(user.referredMembers??[]).length === 0 ? (
-            <div style={{background:"var(--ink2)",border:"1px solid var(--ln2)",borderRadius:12,padding:"12px 14px",fontSize:13,color:"var(--t3)"}}>No referred members yet</div>
-          ) : (
-            <div>
-              {/* Dropdown toggle */}
-              <button onClick={()=>setRefOpen(p=>!p)} style={{width:"100%",background:"var(--ink2)",border:"1px solid var(--ln2)",borderRadius:12,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",color:"var(--t1)",fontFamily:"var(--f)",fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:refOpen?4:0}}>
-                <span>View all {(user.referredMembers??[]).length} members</span>
-                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{transform:refOpen?"rotate(180deg)":"none",transition:"transform .2s"}}><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              {refOpen && (user.referredMembers??[]).map((uname,i)=>{
-                const mu = allUsers.find(u=>u.username===uname);
-                return (
-                  <div key={i} style={{background:"var(--ink2)",border:"1px solid var(--ln)",borderRadius:10,padding:"9px 12px",marginBottom:4,display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{width:28,height:28,borderRadius:7,background:"linear-gradient(135deg,var(--gold),#c07800)",display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontWeight:900,fontSize:10,flexShrink:0}}>
-                      {mu?mu.name.split(" ").map(w=>w[0]).join(""):uname.slice(0,2).toUpperCase()}
-                    </div>
-                    <div>
-                      <div style={{fontWeight:700,fontSize:12}}>{mu?.name??uname}</div>
-                      <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)"}}>{mu?`@${mu.username} · ${mu.email}`:uname}</div>
-                    </div>
-                    {mu && <span className={`badge ${mu.kycStatus==="approved"?"b-up":"b-au"}`} style={{fontSize:9,marginLeft:"auto"}}>{mu.kycStatus??"—"}</span>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function AdminPanel({ onExit }) {
+export default function AdminPanel({ onExit, role }) {
+  const isMain   = role === 'main';
+  const isSecond = role === 'second';
   const { addToast, addSignal, banners, addBanner, toggleBanner, deleteBanner, addNotif, prices, setWick } = useStore();
 
   const [sec,    setSec]    = useState("dash");
@@ -160,7 +79,6 @@ export default function AdminPanel({ onExit }) {
   const [kycList,setKycList]= useState(KYC_REQS);
   const [codes,  setCodes]  = useState(ADMIN_CODES_INIT);
   const [editU,  setEditU]  = useState(null);
-  const [refU,   setRefU]   = useState(null); // user for referral modal
 
   // Search
   const [uQ,setUQ]=useState(""),[dQ,setDQ]=useState(""),[wQ,setWQ]=useState(""),[kQ,setKQ]=useState("");
@@ -179,28 +97,39 @@ export default function AdminPanel({ onExit }) {
   const [nf, setNf] = useState({title:"",body:""});
 
   const q = s=>s.toLowerCase();
-  const fu = users.filter(u=>!uQ||(q(u.name).includes(q(uQ))||q(u.email).includes(q(uQ))||q(u.phone).includes(q(uQ))||q(u.username??"").includes(q(uQ))));
-  const fd = deps.filter(d=>!dQ||(q(d.user).includes(q(dQ))||q(d.hash??"").includes(q(dQ))));
-  const fw = wds.filter(w=>!wQ||(q(w.user).includes(q(wQ))||q(w.address??"").includes(q(wQ))));
-  const fk = kycList.filter(k=>!kQ||(q(k.user).includes(q(kQ))||q(k.email).includes(q(kQ))||q(k.phone).includes(q(kQ))));
+  const visibleUsers = isMain ? users : users.filter(u => !u.hiddenFromSub);
+  const fu = visibleUsers.filter(u=>!uQ||(q(u.name).includes(q(uQ))||q(u.email).includes(q(uQ))||q(u.phone).includes(q(uQ))));
+  const fd = deps.filter(d=>(isMain||d.status==="pending")&&(!dQ||(q(d.user).includes(q(dQ))||q(d.username??"").includes(q(dQ))||q(d.uid??"").includes(q(dQ))||q(d.hash??"").includes(q(dQ)))));
+  const fw = wds.filter(w=>(isMain||w.status==="pending")&&(!wQ||(q(w.user).includes(q(wQ))||q(w.username??"").includes(q(wQ))||q(w.uid??"").includes(q(wQ))||q(w.address??"").includes(q(wQ)))));
+  const fk = kycList.filter(k=>(isMain||k.status==="pending")&&(!kQ||(q(k.user).includes(q(kQ))||q(k.email).includes(q(kQ))||q(k.phone).includes(q(kQ)))));
 
-  const delU  = id=>{setUsers(p=>p.filter(u=>u.id!==id));addToast("User deleted","info");};
+  const delU      = id => { setUsers(p=>p.filter(u=>u.id!==id)); addToast("User deleted","info"); };
+  const toggleHide = id => {
+    setUsers(p => p.map(u => u.id===id ? {...u, hiddenFromSub:!u.hiddenFromSub} : u));
+    const u = users.find(x=>x.id===id);
+    addToast(u?.hiddenFromSub ? "User visible to Sub Admin" : "User hidden from Sub Admin", "info");
+  };
   const saveU = u=>{setUsers(p=>p.map(x=>x.id===u.id?u:x));addToast("User updated","ok");};
-  const appD  = id=>{setDeps(p=>p.map(d=>d.id===id?{...d,status:"approved"}:d));addToast("Deposit approved","ok");};
-  const rejD  = id=>{setDeps(p=>p.map(d=>d.id===id?{...d,status:"rejected"}:d));addToast("Deposit rejected","err");};
-  const appW  = id=>{setWds(p=>p.map(w=>w.id===id?{...w,status:"approved"}:w));addToast("Withdrawal approved","ok");};
-  const rejW  = id=>{setWds(p=>p.map(w=>w.id===id?{...w,status:"rejected"}:w));addToast("Withdrawal rejected","err");};
-  const appK  = id=>{setKycList(p=>p.map(k=>k.id===id?{...k,status:"approved"}:k));addToast("KYC approved","ok");};
-  const rejK  = id=>{setKycList(p=>p.map(k=>k.id===id?{...k,status:"rejected"}:k));addToast("KYC rejected","err");};
+  const logSub = (type, detail, status) => {
+    if (isSecond) {
+      setSubLog(p=>[{id:Date.now(),by:"2nd Admin",type,detail,status,time:new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}),date:new Date().toLocaleDateString()},...p]);
+    }
+  };
+  const appD  = id=>{const d=deps.find(x=>x.id===id);setDeps(p=>p.map(d=>d.id===id?{...d,status:"approved"}:d));addToast("Deposit approved","ok");logSub("Deposit","$"+(d?.amount??0)+" · "+(d?.user??""),"Approved");};
+  const rejD  = id=>{const d=deps.find(x=>x.id===id);setDeps(p=>p.map(d=>d.id===id?{...d,status:"rejected"}:d));addToast("Deposit rejected","err");logSub("Deposit","$"+(d?.amount??0)+" · "+(d?.user??""),"Rejected");};
+  const appW  = id=>{const w=wds.find(x=>x.id===id);setWds(p=>p.map(w=>w.id===id?{...w,status:"approved"}:w));addToast("Withdrawal approved","ok");logSub("Withdrawal","$"+(w?.amount??0)+" · "+(w?.user??""),"Approved");};
+  const rejW  = id=>{const w=wds.find(x=>x.id===id);setWds(p=>p.map(w=>w.id===id?{...w,status:"rejected"}:w));addToast("Withdrawal rejected","err");logSub("Withdrawal","$"+(w?.amount??0)+" · "+(w?.user??""),"Rejected");};
+  const appK  = id=>{const k=kycList.find(x=>x.id===id);setKycList(p=>p.map(k=>k.id===id?{...k,status:"approved"}:k));addToast("KYC approved","ok");logSub("KYC",(k?.user??""),"Approved");};
+  const rejK  = id=>{const k=kycList.find(x=>x.id===id);setKycList(p=>p.map(k=>k.id===id?{...k,status:"rejected"}:k));addToast("KYC rejected","err");logSub("KYC",(k?.user??""),"Rejected");};
 
   const genSig = () => {
     setGBusy(true);
     setTimeout(()=>{
       const code=genCode(selPair), coin=selPair.split("/")[0];
-      const now=new Date(), exp=new Date(now.getTime()+3_600_000);
+      const now=new Date(), exp=new Date(now.getTime()+900_000); // 15 minutes
       const fmt=d=>`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
       setCodes(p=>[{code,pair:selPair,side:selSide,created:fmt(now),expires:fmt(exp),used:0,status:"active"},...p]);
-      addSignal(code,{coin,pair:selPair,side:selSide,created:Date.now(),ttl:3_600_000});
+      addSignal(code,{coin,pair:selPair,side:selSide,created:Date.now(),ttl:900_000});
       setGCode(code);setGBusy(false);
       addToast(`${selSide} code ${code} generated!`,"ok");
     },500);
@@ -215,12 +144,20 @@ export default function AdminPanel({ onExit }) {
     addToast(`Wick: ${wSym} → $${target} over ${wDur}s`,"ok");
   };
 
-  const STATS=[{icon:"👥",label:"Users",value:users.length},{icon:"✅",label:"Active",value:"387"},{icon:"🔑",label:"Codes",value:codes.filter(c=>c.status==="active").length},{icon:"⚡",label:"Trades",value:"94"},{icon:"💰",label:"Paid",value:"$188"},{icon:"⬇",label:"Pending",value:deps.filter(d=>d.status==="pending").length}];
+  const STATS_MAIN   = [{icon:"👥",label:"Users",value:users.length},{icon:"✅",label:"Active",value:"387"},{icon:"🔑",label:"Codes",value:codes.filter(c=>c.status==="active").length},{icon:"⚡",label:"Trades",value:"94"},{icon:"💰",label:"Paid",value:"$188"},{icon:"⬇",label:"Pending",value:deps.filter(d=>d.status==="pending").length}];
+  const STATS_SECOND = [
+    {icon:"👥",label:"Users",    value:users.length},
+    {icon:"✅",label:"Active",   value:users.filter(u=>u.kycStatus==="approved").length},
+    {icon:"🔑",label:"Codes",    value:codes.filter(c=>c.status==="active").length},
+    {icon:"⬇",label:"Dep. Pending", value:deps.filter(d=>d.status==="pending").length},
+    {icon:"⬆",label:"WD Pending",   value:wds.filter(w=>w.status==="pending").length},
+    {icon:"🪪",label:"KYC Pending",  value:kycList.filter(k=>k.status==="pending").length},
+  ];
+  const STATS = isMain ? STATS_MAIN : STATS_SECOND;
 
   return (
     <>
       {editU && <EditModal user={editU} onSave={saveU} onClose={()=>setEditU(null)}/>}
-      {refU  && <ReferralModal user={refU} allUsers={users} onClose={()=>setRefU(null)}/>}
       <div style={{width:"100%",maxWidth:"var(--max)",margin:"0 auto",height:"100dvh",display:"flex",flexDirection:"column",background:"var(--ink)",overflow:"hidden"}}>
 
         {/* Top bar */}
@@ -235,7 +172,7 @@ export default function AdminPanel({ onExit }) {
 
         {/* Menu tabs */}
         <div style={{flexShrink:0,background:"var(--ink2)",borderBottom:"1px solid var(--ln)",overflowX:"auto",display:"flex"}}>
-          {MENU.map(m=>(
+          {MENU.filter(m=>isMain || ["dash","users","codes","deps","wds","kyc"].includes(m.id)).map(m=>(
             <button key={m.id} onClick={()=>setSec(m.id)} style={{padding:"11px 12px",background:"none",border:"none",borderBottom:sec===m.id?"2.5px solid var(--gold)":"2.5px solid transparent",color:sec===m.id?"var(--gold)":"var(--t3)",fontFamily:"var(--f)",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",transition:"all .2s"}}>
               {m.icon} {m.label}
             </button>
@@ -265,64 +202,73 @@ export default function AdminPanel({ onExit }) {
           {/* USERS */}
           {sec==="users"&&(
             <div>
-              <SearchBar value={uQ} onChange={setUQ} placeholder="Search by name, email, username..."/>
-              <div style={{fontSize:12,color:"var(--t3)",marginBottom:10}}>{fu.length} user{fu.length!==1?"s":""} found</div>
-              {fu.map(u=>{
-                const refCount = u.referredCount ?? (u.referredMembers?.length ?? 0);
-                const lvInfo   = getRefLevel(refCount);
-                return (
-                  <div key={u.id} className="card" style={{padding:14,marginBottom:10}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                      <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,var(--gold),#c07800)",display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontWeight:900,fontSize:13,flexShrink:0}}>
-                        {u.name.split(" ").map(w=>w[0]).join("")}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontWeight:700,fontSize:13}}>{u.name}</div>
-                        <div style={{fontSize:10,color:"var(--t2)",fontFamily:"var(--m)"}}>{u.username?"@"+u.username+" · ":""}{u.email}</div>
-                        <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)"}}>{u.phone} · {u.joined}</div>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-end"}}>
-                        <span className="badge b-au">T{u.tier}</span>
-                        <SB s={u.kycStatus??"none"}/>
-                        {/* Referral level badge */}
-                        {lvInfo.level > 0 && (
-                          <span style={{display:"inline-flex",alignItems:"center",background:`${lvInfo.color}18`,border:`1px solid ${lvInfo.color}40`,borderRadius:20,padding:"2px 7px",fontSize:9,fontWeight:900,fontFamily:"var(--m)",color:lvInfo.color}}>
-                            ★ {lvInfo.label}
-                          </span>
+              <SearchBar value={uQ} onChange={setUQ} placeholder="Search by name, email, phone..."/>
+              <div style={{fontSize:12,color:"var(--t3)",marginBottom:10}}>{fu.length} user{fu.length!==1?"s":""} found{isMain && users.filter(u=>u.hiddenFromSub).length > 0 &&  <span style={{marginLeft:8,fontSize:10,color:"var(--dn)",fontWeight:700}}>  ({users.filter(u=>u.hiddenFromSub).length} hidden from Sub Admin) </span>}</div>
+              {fu.map(u=>(
+                <div key={u.id} className="card" style={{padding:14,marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                    <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,var(--gold),#c07800)",display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontWeight:900,fontSize:13,flexShrink:0}}>
+                      {u.name.split(" ").map(w=>w[0]).join("")}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{fontWeight:700,fontSize:13}}>{u.name}</span>
+                        {isMain && u.hiddenFromSub && (
+                          <span style={{fontSize:9,fontWeight:700,background:"rgba(255,59,92,.15)",color:"var(--dn)",border:"1px solid rgba(255,59,92,.3)",borderRadius:4,padding:"2px 5px"}}>HIDDEN</span>
                         )}
                       </div>
+                      <div style={{fontSize:11,color:"var(--t2)",fontFamily:"var(--m)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email}</div>
+                      <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)"}}>{u.phone} · {u.joined}</div>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:10}}>
-                      {[["Funding","$"+(u.fundBal??0).toFixed(0),"var(--blue)"],["Trading","$"+(u.tradeBal??0).toFixed(0),"var(--up)"],["Earned","$"+(u.earnings??0).toFixed(0),"var(--gold)"],["Withdrawn","$"+(u.withdrawn??0).toFixed(0),"var(--dn)"]].map(([l,v,c])=>(
-                        <div key={l} style={{background:"var(--ink2)",borderRadius:8,padding:"8px 10px"}}>
-                          <div style={{fontSize:9,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:2}}>{l}</div>
-                          <div style={{fontSize:12,fontWeight:700,fontFamily:"var(--m)",color:c}}>{v}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Referral summary row */}
-                    <div style={{background:"var(--ink2)",borderRadius:10,padding:"8px 12px",marginBottom:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                      <div style={{fontSize:11,color:"var(--t3)"}}>
-                        <span style={{fontWeight:700}}>Referred by: </span>
-                        {u.referredBy
-                          ? <span style={{color:"var(--blue)"}}>{u.referredBy}</span>
-                          : <span style={{color:"var(--t4)"}}>—</span>}
-                      </div>
-                      <div style={{fontSize:11,color:"var(--t3)",marginLeft:"auto"}}>
-                        <span style={{fontWeight:700}}>Referrals: </span>
-                        <span style={{color:lvInfo.level>0?lvInfo.color:"var(--t2)",fontWeight:700}}>{refCount}</span>
-                      </div>
-                      <button onClick={()=>setRefU(u)} style={{fontSize:10,color:"var(--gold)",fontWeight:700,background:"rgba(240,165,0,.08)",border:"1px solid rgba(240,165,0,.2)",borderRadius:7,padding:"3px 9px",cursor:"pointer"}}>
-                        Referral Details →
-                      </button>
-                    </div>
-                    <div style={{display:"flex",gap:8}}>
-                      <button className="btn btn-outline btn-sm" style={{flex:1}} onClick={()=>setEditU(u)}>✏️ Edit</button>
-                      <button className="btn btn-red btn-sm" style={{flex:1}} onClick={()=>{if(window.confirm(`Delete ${u.name}?`))delU(u.id);}}>🗑 Delete</button>
+                    <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-end"}}>
+                      <span className="badge b-au">{u.tier?"T"+u.tier:"No Tier"}</span>
+                      {(()=>{const lv=getRefLevel(u.referralCount??0);return lv.level>0?<span style={{display:"inline-flex",background:lv.color+"18",border:"1px solid "+lv.color+"40",borderRadius:20,padding:"2px 7px",fontSize:9,fontWeight:900,fontFamily:"var(--m)",color:lv.color}}>{"★ "+lv.label}</span>:null;})()}
+                      <SB s={u.kycStatus??"none"}/>
                     </div>
                   </div>
-                );
-              })}
+                  {isMain&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:8}}>
+                    {[["Funding","$"+(u.fundBal??0).toFixed(0),"var(--blue)"],["Trading","$"+(u.tradeBal??0).toFixed(0),"var(--up)"],["Earned","$"+(u.earnings??0).toFixed(0),"var(--gold)"],["Withdrawn","$"+(u.withdrawn??0).toFixed(0),"var(--dn)"]].map(([l,v,c])=>(
+                      <div key={l} style={{background:"var(--ink2)",borderRadius:8,padding:"8px 10px"}}>
+                        <div style={{fontSize:9,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:2}}>{l}</div>
+                        <div style={{fontSize:12,fontWeight:700,fontFamily:"var(--m)",color:c}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>}
+                  {/* Referral info row */}
+                  <div style={{background:"var(--ink2)",borderRadius:10,padding:"8px 12px",marginBottom:10,display:"flex",gap:12,flexWrap:"wrap"}}>
+                    <div style={{fontSize:11,color:"var(--t3)"}}>
+                      <span style={{fontWeight:700,color:"var(--t2)"}}>UID: </span>
+                      <span style={{fontFamily:"var(--m)",color:"var(--gold)"}}>{u.uid||"—"}</span>
+                    </div>
+                    <div style={{fontSize:11,color:"var(--t3)"}}>
+                      <span style={{fontWeight:700,color:"var(--t2)"}}>Referred By: </span>
+                      <span style={{color:"var(--blue)"}}>{u.referredBy||"—"}</span>
+                    </div>
+                    <div style={{fontSize:11,color:"var(--t3)"}}>
+                      <span style={{fontWeight:700,color:"var(--t2)"}}>Referrals: </span>
+                      <span style={{color:getRefLevel(u.referralCount??0).color,fontWeight:700}}>{u.referralCount??0}</span>
+                    </div>
+                  </div>
+                  {isMain&&<div style={{display:"flex",gap:8}}>
+                    <button className="btn btn-outline btn-sm" style={{flex:1}} onClick={()=>setEditU(u)}>✏️ Edit</button>
+                    <button className="btn btn-red btn-sm" style={{flex:1}} onClick={()=>{if(window.confirm(`Delete ${u.name}?`))delU(u.id);}}>🗑 Delete</button>
+                    {isMain && (
+                      <button
+                        onClick={() => toggleHide(u.id)}
+                        style={{
+                          padding:"7px 10px", borderRadius:8, border:`1.5px solid ${u.hiddenFromSub?"rgba(255,59,92,.4)":"rgba(255,165,0,.3)"}`,
+                          background:u.hiddenFromSub?"rgba(255,59,92,.1)":"rgba(255,165,0,.08)",
+                          color:u.hiddenFromSub?"var(--dn)":"var(--gold)",
+                          fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0
+                        }}
+                      >
+                        {u.hiddenFromSub ? "👁 Show Sub" : "🚫 Hide Sub"}
+                      </button>
+                    )}
+                  </div>}
+                  {isSecond&&<div style={{fontSize:11,color:"var(--t3)",textAlign:"center",padding:"4px 0"}}>View only</div>}
+                </div>
+              ))}
             </div>
           )}
 
@@ -371,51 +317,91 @@ export default function AdminPanel({ onExit }) {
             </div>
           )}
 
-          {/* PRICE CONTROL */}
+          {/* ══ PRICE CONTROL ══ */}
           {sec==="price"&&(
             <div>
               <div style={{background:"rgba(255,59,92,.08)",border:"1px solid rgba(255,59,92,.2)",borderRadius:12,padding:"12px 14px",marginBottom:16,fontSize:13,color:"var(--t2)",lineHeight:1.6}}>
-                ⚠️ <strong style={{color:"var(--dn)"}}>University Demo Only</strong> — Price manipulation for academic demonstration.
+                ⚠️ <strong style={{color:"var(--dn)"}}>Demo Only</strong> — Price manipulation for academic demonstration. 🔒 <strong style={{color:"var(--pu)"}}>Main Admin Only</strong> — Hidden from 2nd Admin.
               </div>
+
               <div className="card" style={{padding:18,marginBottom:16}}>
                 <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>📈 Launch Price Wick</div>
+
+                {/* Coin selector */}
                 <div style={{marginBottom:14}}>
                   <div className="lbl" style={{marginBottom:8}}>Select Coin</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                     {Object.keys(COINS).map(s=>(
-                      <button key={s} onClick={()=>setWSym(s)} style={{padding:"6px 12px",borderRadius:8,border:wSym===s?"1.5px solid var(--gold)":"1px solid var(--ln)",background:wSym===s?"rgba(240,165,0,.1)":"var(--ink2)",color:wSym===s?"var(--gold)":"var(--t2)",fontFamily:"var(--m)",fontSize:12,fontWeight:700,cursor:"pointer"}}>{s}</button>
+                      <button key={s} onClick={()=>setWSym(s)} style={{padding:"6px 12px",borderRadius:8,border:wSym===s?"1.5px solid var(--gold)":"1px solid var(--ln)",background:wSym===s?"rgba(240,165,0,.1)":"var(--ink2)",color:wSym===s?"var(--gold)":"var(--t2)",fontFamily:"var(--m)",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        {s}
+                      </button>
                     ))}
                   </div>
                 </div>
+
+                {/* Current price */}
                 <div style={{background:"var(--ink2)",border:"1px solid var(--ln)",borderRadius:10,padding:"10px 14px",marginBottom:14,display:"flex",justifyContent:"space-between"}}>
                   <span style={{color:"var(--t2)",fontSize:13}}>Current {wSym} Price</span>
-                  <span style={{fontFamily:"var(--m)",fontSize:14,fontWeight:700,color:"var(--gold)"}}>${(prices[wSym]??COINS[wSym]?.price??0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                  <span style={{fontFamily:"var(--m)",fontSize:14,fontWeight:700,color:"var(--gold)"}}>
+                    ${(prices[wSym]??COINS[wSym]?.price??0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                  </span>
                 </div>
+
+                {/* Target price */}
                 <div className="fg">
-                  <label className="lbl">Target Price ($)</label>
-                  <input className="inp" type="number" placeholder="e.g. 70000" value={wTarget} onChange={e=>setWTarget(e.target.value)}/>
-                  {wTarget&&parseFloat(wTarget)>0&&(<div style={{fontSize:11,color:parseFloat(wTarget)>(prices[wSym]??0)?"var(--up)":"var(--dn)",marginTop:4}}>{parseFloat(wTarget)>(prices[wSym]??0)?"▲ Upward (pump)":"▼ Downward (dump)"} — {Math.abs(((parseFloat(wTarget)-(prices[wSym]??0))/(prices[wSym]??1))*100).toFixed(2)}% move</div>)}
+                  <label className="lbl">Target Price ($) — Wick Destination</label>
+                  <input className="inp" type="number" placeholder={`e.g. ${((prices[wSym]??COINS[wSym]?.price??0)*1.05).toFixed(2)}`} value={wTarget} onChange={e=>setWTarget(e.target.value)}/>
+                  {wTarget&&parseFloat(wTarget)>0&&(
+                    <div style={{fontSize:11,color:parseFloat(wTarget)>(prices[wSym]??0)?"var(--up)":"var(--dn)",marginTop:4}}>
+                      {parseFloat(wTarget)>(prices[wSym]??0)?"▲ Upward (pump)":"▼ Downward (dump)"} — {Math.abs(((parseFloat(wTarget)-(prices[wSym]??0))/(prices[wSym]??1))*100).toFixed(2)}% move
+                    </div>
+                  )}
                 </div>
+
+                {/* Duration */}
                 <div className="fg">
                   <label className="lbl">Duration (seconds)</label>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-                    {["10","30","60","120","300"].map(d=><button key={d} onClick={()=>setWDur(d)} style={{padding:"6px 12px",borderRadius:8,border:wDur===d?"1.5px solid var(--blue)":"1px solid var(--ln)",background:wDur===d?"rgba(45,156,255,.1)":"var(--ink2)",color:wDur===d?"var(--blue)":"var(--t2)",fontFamily:"var(--m)",fontSize:12,fontWeight:700,cursor:"pointer"}}>{d}s</button>)}
+                    {["10","30","60","120","300"].map(d=>(
+                      <button key={d} onClick={()=>setWDur(d)} style={{padding:"6px 12px",borderRadius:8,border:wDur===d?"1.5px solid var(--blue)":"1px solid var(--ln)",background:wDur===d?"rgba(45,156,255,.1)":"var(--ink2)",color:wDur===d?"var(--blue)":"var(--t2)",fontFamily:"var(--m)",fontSize:12,fontWeight:700,cursor:"pointer"}}>{d}s</button>
+                    ))}
                   </div>
                   <input className="inp" type="number" placeholder="Custom seconds" value={wDur} onChange={e=>setWDur(e.target.value)} style={{fontSize:13}}/>
                 </div>
+
+                {/* Preview */}
+                <div style={{background:"var(--ink2)",border:"1px solid var(--ln)",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
+                  <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:6,letterSpacing:".5px"}}>WICK PREVIEW</div>
+                  <div style={{fontSize:12,color:"var(--t2)",lineHeight:1.9}}>
+                    Price moves <strong style={{color:"var(--t1)"}}>${(prices[wSym]??COINS[wSym]?.price??0).toFixed(2)}</strong>
+                    {" "}→ <strong style={{color:parseFloat(wTarget)>(prices[wSym]??0)?"var(--up)":"var(--dn)"}}>${parseFloat(wTarget)||"?"}</strong>
+                    {" "}→ <strong style={{color:"var(--t1)"}}>${(prices[wSym]??COINS[wSym]?.price??0).toFixed(2)}</strong>
+                    {" "}over <strong style={{color:"var(--blue)"}}>{wDur}s</strong>.
+                    <br/>The wick candle will appear on the <strong>Market chart</strong> and <strong>Futures chart</strong> in real time.
+                  </div>
+                </div>
+
                 <button className="btn btn-gold btn-block" style={{fontSize:15}} onClick={launchWick}>🚀 Launch Wick</button>
               </div>
+
+              {/* Quick presets */}
               <div style={{fontWeight:800,fontSize:14,marginBottom:10}}>Quick Presets</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
                 {[
-                  {label:"BTC +5% Pump",sym:"BTC",mult:1.05,dur:60,c:"var(--up)"},
-                  {label:"BTC -5% Dump",sym:"BTC",mult:0.95,dur:60,c:"var(--dn)"},
-                  {label:"ETH +10% Pump",sym:"ETH",mult:1.10,dur:120,c:"var(--up)"},
-                  {label:"ETH -10% Dump",sym:"ETH",mult:0.90,dur:120,c:"var(--dn)"},
-                  {label:"SOL +8% Pump",sym:"SOL",mult:1.08,dur:60,c:"var(--up)"},
-                  {label:"BNB -7% Dump",sym:"BNB",mult:0.93,dur:90,c:"var(--dn)"},
+                  {label:"BTC +5% Pump",  sym:"BTC",mult:1.05,dur:60, c:"var(--up)"},
+                  {label:"BTC -5% Dump",  sym:"BTC",mult:0.95,dur:60, c:"var(--dn)"},
+                  {label:"ETH +10% Pump", sym:"ETH",mult:1.10,dur:120,c:"var(--up)"},
+                  {label:"ETH -10% Dump", sym:"ETH",mult:0.90,dur:120,c:"var(--dn)"},
+                  {label:"SOL +8% Pump",  sym:"SOL",mult:1.08,dur:60, c:"var(--up)"},
+                  {label:"BNB -7% Dump",  sym:"BNB",mult:0.93,dur:90, c:"var(--dn)"},
                 ].map(p=>(
-                  <button key={p.label} onClick={()=>{const sp=prices[p.sym]??COINS[p.sym]?.price??0;setWick({sym:p.sym,targetPrice:sp*p.mult,durationMs:p.dur*1000,startPrice:sp,startAt:Date.now()});addToast(`${p.label} launched`,"ok");}} style={{padding:"12px 10px",borderRadius:12,border:`1px solid ${p.c}30`,background:`${p.c}10`,color:p.c,fontWeight:700,fontSize:12,cursor:"pointer",textAlign:"center"}}>{p.label}</button>
+                  <button key={p.label} onClick={()=>{
+                    const sp=prices[p.sym]??COINS[p.sym]?.price??0;
+                    setWick({sym:p.sym,targetPrice:sp*p.mult,durationMs:p.dur*1000,startPrice:sp,startAt:Date.now()});
+                    addToast(`${p.label} launched`,"ok");
+                  }} style={{padding:"12px 10px",borderRadius:12,border:`1px solid ${p.c}30`,background:`${p.c}10`,color:p.c,fontWeight:700,fontSize:12,cursor:"pointer",textAlign:"center"}}>
+                    {p.label}
+                  </button>
                 ))}
               </div>
             </div>
@@ -478,7 +464,7 @@ export default function AdminPanel({ onExit }) {
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:k.status==="pending"?12:0}}>
                     {[["CNIC Front",k.cnicF],["CNIC Back",k.cnicB]].map(([l,v])=>(
                       <div key={l} style={{background:"var(--ink2)",border:"1px solid var(--ln2)",borderRadius:10,overflow:"hidden"}}>
-                        <div style={{height:70,background:"linear-gradient(135deg,var(--ink3),var(--ink4))",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><span style={{fontSize:20}}>🪪</span><span style={{fontSize:9,color:"var(--t3)",fontFamily:"var(--m)",textAlign:"center",padding:"0 4px"}}>{v}</span></div>
+                        <div style={{height:70,background:"linear-gradient(135deg,var(--ink3),var(--ink4))",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><span style={{fontSize:20}}>🪪</span><span style={{fontSize:9,color:"var(--t3)",fontFamily:"var(--m)",textAlign:"center",padding:"0 4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{v}</span></div>
                         <div style={{padding:"5px 8px",fontSize:10,color:"var(--t3)",fontFamily:"var(--m)",fontWeight:700}}>{l}</div>
                       </div>
                     ))}
@@ -521,6 +507,35 @@ export default function AdminPanel({ onExit }) {
                 <button className="btn btn-gold btn-sm" onClick={()=>{if(!nf.title){addToast("Title required","err");return;}addNotif({id:"n"+Date.now(),title:nf.title,body:nf.body,time:"just now",read:false});setNf({title:"",body:""});addToast("Notification sent","ok");}}>Send to All Users</button>
               </div>
               <div style={{height:16}}/>
+            </div>
+          )}
+
+          {/* ══ SUB ADMIN ACTIVITY LOG — MAIN ADMIN ONLY ══ */}
+          {sec==="activity"&&isMain&&(
+            <div>
+              <div style={{background:"rgba(168,85,247,.06)",border:"1px solid rgba(168,85,247,.2)",borderRadius:12,padding:"12px 14px",marginBottom:16,fontSize:13,color:"var(--t2)",lineHeight:1.6}}>
+                🕵️ <strong style={{color:"#a855f7"}}>Sub Admin Activity</strong> — All actions taken by the 2nd Admin are recorded here.
+              </div>
+              {subLog.length===0?(
+                <div className="empty"><div className="ei">📋</div><p style={{fontSize:13,color:"var(--t3)"}}>No activity recorded yet</p></div>
+              ):(
+                <div>
+                  <div style={{fontSize:12,color:"var(--t3)",marginBottom:10}}>{subLog.length} action{subLog.length!==1?"s":""} recorded</div>
+                  {subLog.map(log=>(
+                    <div key={log.id} className="card" style={{padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
+                      <div style={{width:38,height:38,borderRadius:11,background:log.status==="Approved"?"rgba(0,200,150,.12)":"rgba(255,59,92,.12)",border:`1px solid ${log.status==="Approved"?"rgba(0,200,150,.3)":"rgba(255,59,92,.3)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
+                        {log.type==="Deposit"?"⬇":log.type==="Withdrawal"?"⬆":"🪪"}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:700,fontSize:13}}>{log.type} <span style={{color:log.status==="Approved"?"var(--up)":"var(--dn)",fontSize:11}}>— {log.status}</span></div>
+                        <div style={{fontSize:11,color:"var(--t2)",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{log.detail}</div>
+                        <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)",marginTop:2}}>By: {log.by} · {log.date} {log.time}</div>
+                      </div>
+                      <span className={`badge ${log.status==="Approved"?"b-up":"b-dn"}`} style={{fontSize:9,flexShrink:0}}>{log.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

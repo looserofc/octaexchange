@@ -4,7 +4,7 @@ export default function MyApp({ Component, pageProps }) {
   return (
     <>
       <Head>
-        <title>NexTrade — Smart Crypto Investment</title>
+        <title>OctaTrade — Smart Crypto Investment</title>
         <meta name="description" content="Signal-based crypto copy trading platform"/>
         <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
         <meta name="theme-color" content="#07090f"/>

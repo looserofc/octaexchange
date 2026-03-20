@@ -1,30 +1,8 @@
-export const FUND_WD_FEE   = 0.10;   // 10% withdrawal fee from Funding Account
-export const TRADE_OUT_FEE = 0.25;   // 25% fee when transferring Trading → Funding
+export const FUND_WD_FEE   = 0.05;   // 5%
+export const TRADE_OUT_FEE = 0.25;   // 25%
 export const FREEZE_DAYS   = 20;
 export const FREEZE_MS     = FREEZE_DAYS * 24 * 60 * 60 * 1000;
-export const MIN_WD        = 100;    // Minimum withdrawal $100
-export const MIN_DEP       = 100;    // Minimum deposit $100
-
-// ─── Referral Level thresholds ─────────────────────────────
-export const REF_LEVELS = [
-  { level: 0,  label: "—",    min: 0,    max: 0,     color: "#435070", badge: "b-dim" },
-  { level: 1,  label: "LV 1", min: 1,    max: 5,     color: "#8a97b8", badge: "b-dim" },
-  { level: 2,  label: "LV 2", min: 6,    max: 30,    color: "#4d9fff", badge: "b-bl"  },
-  { level: 3,  label: "LV 3", min: 31,   max: 120,   color: "#00d4ff", badge: "b-bl"  },
-  { level: 4,  label: "LV 4", min: 121,  max: 500,   color: "#00e676", badge: "b-up"  },
-  { level: 5,  label: "LV 5", min: 501,  max: 1500,  color: "#00f5c8", badge: "b-up"  },
-  { level: 6,  label: "LV 6", min: 1501, max: 3000,  color: "#9b59ff", badge: "b-pu"  },
-  { level: 7,  label: "LV 7", min: 3001, max: 5000,  color: "#e056fd", badge: "b-pu"  },
-  { level: 10, label: "LV 10",min: 5001, max: 999999,color: "#f0a500", badge: "b-au"  },
-];
-
-export function getRefLevel(count = 0) {
-  if (count <= 0) return REF_LEVELS[0];
-  for (let i = REF_LEVELS.length - 1; i >= 1; i--) {
-    if (count >= REF_LEVELS[i].min) return REF_LEVELS[i];
-  }
-  return REF_LEVELS[0];
-}
+export const MIN_WD        = 11;
 
 export const TIERS = [
   {id:1, name:"Tier 1",  price:100,  profit:1,  color:"#8a97b8"},
@@ -58,14 +36,14 @@ export const NETWORKS = [
   {id:"bep20",name:"BEP20 (USDT)",fee:"0.5 USDT",min:10, address:"0xBEP20abc123def456ghi789jkl012mno345pqr"},
 ];
 
-export const PAIRS     = ["BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT"];
-export const LEVERAGES = [1,2,3,5,10,20,50,100];
+export const PAIRS    = ["BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT"];
+export const LEVERAGES= [1,2,3,5,10,20,50,100];
 
 export const SIGNALS_INIT = {
-  BTC9421:{coin:"BTC",pair:"BTC/USDT",side:"BUY", created:Date.now()-600_000,ttl:3_600_000},
-  ETH7364:{coin:"ETH",pair:"ETH/USDT",side:"SELL",created:Date.now()-300_000,ttl:3_600_000},
-  SOL1982:{coin:"SOL",pair:"SOL/USDT",side:"BUY", created:Date.now()-120_000,ttl:3_600_000},
-  BNB4471:{coin:"BNB",pair:"BNB/USDT",side:"BUY", created:Date.now()-60_000, ttl:3_600_000},
+  BTC9421:{coin:"BTC",pair:"BTC/USDT",side:"BUY", created:Date.now()-600_000,ttl:900_000},
+  ETH7364:{coin:"ETH",pair:"ETH/USDT",side:"SELL",created:Date.now()-300_000,ttl:900_000},
+  SOL1982:{coin:"SOL",pair:"SOL/USDT",side:"BUY", created:Date.now()-120_000,ttl:900_000},
+  BNB4471:{coin:"BNB",pair:"BNB/USDT",side:"BUY", created:Date.now()-60_000, ttl:900_000},
 };
 
 export const ORDER_HISTORY_INIT = [
@@ -75,9 +53,9 @@ export const ORDER_HISTORY_INIT = [
 ];
 
 export const TX_INIT = [
-  {id:"tx1",type:"deposit",      wallet:"funding", amount:200,fee:0,  net:200, network:"TRC20",        status:"completed",date:"2025-01-10",hash:"TX8a4f..."},
-  {id:"tx2",type:"transfer_in",  wallet:"trading", amount:200,fee:0,  net:200, note:"Funding→Trading", status:"completed",date:"2025-01-10"},
-  {id:"tx3",type:"trade_profit", wallet:"trading", amount:2,  fee:0,  net:2,   coin:"BTC/USDT",        status:"completed",date:"2025-01-12"},
+  {id:"tx1",type:"deposit",       wallet:"funding", amount:200,fee:0,  net:200, network:"TRC20",           status:"completed",date:"2025-01-10",hash:"TX8a4f..."},
+  {id:"tx2",type:"transfer_in",   wallet:"trading", amount:200,fee:0,  net:200, note:"Funding→Trading",    status:"completed",date:"2025-01-10"},
+  {id:"tx3",type:"trade_profit",  wallet:"trading", amount:2,  fee:0,  net:2,   coin:"BTC/USDT",           status:"completed",date:"2025-01-12"},
 ];
 
 export const NOTIFS_INIT = [
@@ -88,14 +66,15 @@ export const NOTIFS_INIT = [
 
 export const BANNERS_INIT = [
   {id:"b1",title:"🎉 Welcome Bonus",text:"Deposit today & get 10% bonus on Tier 3+",color:"#f0a500",active:true},
+  // {id:"b2",title:"📲 New Signals",  text:"Check WhatsApp for today's signals!",     color:"#00c896",active:true},
 ];
 
 export const MOCK_USERS = [
-  {id:"u1",name:"Alice Chen",   username:"alicechen",   email:"alice@gmail.com", phone:"+1-555-0101",joined:"2024-09-15",tier:3,fundBal:2200, tradeBal:2621,earnings:312, withdrawn:200, kycStatus:"approved", referralCode:"NXT11111", referredBy:null,         referredCount:7,   referredMembers:["bobwilliams","carlosruiz"]},
-  {id:"u2",name:"Bob Williams", username:"bobwilliams", email:"bob@gmail.com",   phone:"+1-555-0102",joined:"2024-10-02",tier:5,fundBal:4800, tradeBal:7600,earnings:980, withdrawn:500, kycStatus:"approved", referralCode:"NXT22222", referredBy:"alicechen",  referredCount:35,  referredMembers:["carlosruiz"]},
-  {id:"u3",name:"Carlos Ruiz",  username:"carlosruiz",  email:"carlos@gmail.com",phone:"+1-555-0103",joined:"2024-11-18",tier:2,fundBal:892,  tradeBal:0,   earnings:48,  withdrawn:0,   kycStatus:"pending",  referralCode:"NXT33333", referredBy:"alicechen",  referredCount:0,   referredMembers:[]},
-  {id:"u4",name:"Dina Patel",   username:"dinapatel",   email:"dina@gmail.com",  phone:"+1-555-0104",joined:"2024-12-01",tier:7,fundBal:8400, tradeBal:20000,earnings:2400,withdrawn:1200,kycStatus:"approved", referralCode:"NXT44444", referredBy:"bobwilliams",referredCount:125, referredMembers:["erikjensen"]},
-  {id:"u5",name:"Erik Jensen",  username:"erikjensen",  email:"erik@gmail.com",  phone:"+1-555-0105",joined:"2025-01-05",tier:1,fundBal:450,  tradeBal:0,   earnings:12,  withdrawn:0,   kycStatus:"none",     referralCode:"NXT55555", referredBy:"carlosruiz", referredCount:2,   referredMembers:[]},
+  {id:"u1",name:"Alice Chen",   email:"alice@gmail.com", phone:"+1-555-0101",joined:"2024-09-15",tier:3,fundBal:2200, tradeBal:2621,earnings:312, withdrawn:200, kycStatus:"approved",referralCount:7,referralCode:"OCT11111",uid:"OCT100001"},
+  {id:"u2",name:"Bob Williams", email:"bob@gmail.com",   phone:"+1-555-0102",joined:"2024-10-02",tier:5,fundBal:4800, tradeBal:7600,earnings:980, withdrawn:500, kycStatus:"approved",referralCount:35,referralCode:"OCT22222",uid:"OCT100002"},
+  {id:"u3",name:"Carlos Ruiz",  email:"carlos@gmail.com",phone:"+1-555-0103",joined:"2024-11-18",tier:2,fundBal:892,  tradeBal:0,   earnings:48,  withdrawn:0,   kycStatus:"pending" ,referralCount:0,referralCode:"OCT33333",uid:"OCT100003"},
+  {id:"u4",name:"Dina Patel",   email:"dina@gmail.com",  phone:"+1-555-0104",joined:"2024-12-01",tier:7,fundBal:8400, tradeBal:20000,earnings:2400,withdrawn:1200,kycStatus:"approved",referralCount:125,referralCode:"OCT44444",uid:"OCT100004"},
+  {id:"u5",name:"Erik Jensen",  email:"erik@gmail.com",  phone:"+1-555-0105",joined:"2025-01-05",tier:1,fundBal:450,  tradeBal:0,   earnings:12,  withdrawn:0,   kycStatus:"none"    ,referralCount:2,referralCode:"OCT55555",uid:"OCT100005"},
 ];
 
 export const DEP_REQS = [
@@ -130,3 +109,28 @@ export function fmtP(sym,p){
 }
 export function initials(n=""){return n.split(" ").filter(Boolean).map(w=>w[0].toUpperCase()).slice(0,2).join("");}
 export function genCode(pair){return pair.split("/")[0]+Math.floor(1000+Math.random()*9000);}
+
+// ── Referral Level System ─────────────────────────────────
+export const REF_LEVELS = [
+  { level:0,  label:"LV 0",  min:0,    max:0,      color:"#435070" },
+  { level:1,  label:"LV 1",  min:1,    max:5,      color:"#8a97b8" },
+  { level:2,  label:"LV 2",  min:6,    max:30,     color:"#4d9fff" },
+  { level:3,  label:"LV 3",  min:31,   max:120,    color:"#00d4ff" },
+  { level:4,  label:"LV 4",  min:121,  max:500,    color:"#00e676" },
+  { level:5,  label:"LV 5",  min:501,  max:1500,   color:"#00f5c8" },
+  { level:6,  label:"LV 6",  min:1501, max:3000,   color:"#9b59ff" },
+  { level:7,  label:"LV 7",  min:3001, max:5000,   color:"#e056fd" },
+  { level:10, label:"LV 10", min:5001, max:999999, color:"#f0a500" },
+];
+
+export function getRefLevel(count = 0) {
+  if (count <= 0) return REF_LEVELS[0];
+  for (let i = REF_LEVELS.length - 1; i >= 1; i--) {
+    if (count >= REF_LEVELS[i].min) return REF_LEVELS[i];
+  }
+  return REF_LEVELS[0];
+}
+
+export function genUID() {
+  return "OCT" + String(Math.floor(100000 + Math.random() * 900000));
+}

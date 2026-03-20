@@ -1,418 +1,130 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
-import { TIERS, getRefLevel } from "@/lib/data";
-import CoinIcon from "@/components/ui/CoinIcon";
-import { fmtP } from "@/lib/data";
+import { TIERS, getRefLevel, REF_LEVELS } from "@/lib/data";
 
-// ── YOUR TELEGRAM LINK — change this to your actual Telegram username ──
-const TELEGRAM_LINK = "https://t.me/YourTelegramUsername";
+// ── All sub-screens defined OUTSIDE to prevent focus loss ──
 
-function BackHdr({ onBack, title }) {
+function BackHdr({ onBack, title, right }) {
   return (
-    <div className="hdr">
+    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20 }}>
       <button onClick={onBack} style={{ color:"var(--t2)", display:"flex", alignItems:"center", gap:4, fontSize:13 }}>
-        <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>Back
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>Back
       </button>
-      <span style={{ fontWeight:800, fontSize:17 }}>{title}</span>
+      <span style={{ fontWeight:800, fontSize:17, letterSpacing:"-.3px" }}>{title}</span>
+      {right && <div style={{ marginLeft:"auto" }}>{right}</div>}
     </div>
   );
 }
 
-function Eye({ show, toggle }) {
-  return (
-    <button type="button" onClick={toggle} style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:"var(--t3)", cursor:"pointer", padding:0, display:"flex" }}>
-      {show
-        ? <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-        : <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      }
-    </button>
-  );
-}
-
-// ── Identity Verification ──────────────────────────────
 function KYCScreen({ user, setUser, addToast, onBack }) {
-  const [docType, setDocType] = useState("Passport");
-  const [name,    setName]    = useState(user.name||"");
-  const [phone,   setPhone]   = useState(user.phone||"");
-  const [idNum,   setIdNum]   = useState("");
-  const [front,   setFront]   = useState("");
-  const [back,    setBack]    = useState("");
-  const [selfie,  setSelfie]  = useState("");
-  const [errs,    setErrs]    = useState({});
+  const [fullName, setFullName] = useState(user.name||"");
+  const [address,  setAddress]  = useState("");
+  const [phone,    setPhone]    = useState(user.phone||"");
+  const [cnicF,    setCnicF]    = useState("");
+  const [cnicB,    setCnicB]    = useState("");
+  const [errs,     setErrs]     = useState({});
+  const ce = k => setErrs(p => { const n={...p}; delete n[k]; return n; });
+
+  const submit = () => {
+    const e={};
+    if (!fullName.trim()) e.n="Full name required";
+    if (!address.trim())  e.a="Address required";
+    if (!phone.trim())    e.p="Phone required";
+    if (!cnicF)           e.f="CNIC front required";
+    if (!cnicB)           e.b="CNIC back required";
+    if (Object.keys(e).length) { setErrs(e); return; }
+    setUser({ ...user, kycStatus:"pending", kycData:{fullName,address,phone,cnicF,cnicB} });
+    addToast("KYC submitted — admin reviews within 24h","info");
+    onBack();
+  };
 
   if (user.kycStatus==="pending"||user.kycStatus==="approved") {
     const ok = user.kycStatus==="approved";
     return (
       <div>
-        <BackHdr onBack={onBack} title="Identity Verification"/>
-        <div style={{ padding:"40px 20px", textAlign:"center" }}>
-          <div style={{ fontSize:60, marginBottom:16 }}>{ok?"✅":"⏳"}</div>
-          <div style={{ fontSize:20, fontWeight:800, marginBottom:10 }}>{ok?"KYC Verified!":"Under Review"}</div>
-          <div style={{ fontSize:13, color:"var(--t2)", lineHeight:1.8 }}>
-            {ok ? "Your identity is verified. Withdrawals are enabled." : "Documents submitted. Admin will verify within 24 hours."}
-          </div>
+        <BackHdr onBack={onBack} title="KYC Verification"/>
+        <div style={{ textAlign:"center", padding:"32px 20px", background:ok?"rgba(0,200,150,.06)":"rgba(240,165,0,.06)", border:`1px solid ${ok?"rgba(0,200,150,.2)":"rgba(240,165,0,.2)"}`, borderRadius:20 }}>
+          <div style={{ fontSize:52, marginBottom:14 }}>{ok?"✅":"⏳"}</div>
+          <div style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>{ok?"KYC Verified!":"Under Review"}</div>
+          <div style={{ fontSize:13, color:"var(--t2)", lineHeight:1.7 }}>{ok?"Your identity is verified. Withdrawals are enabled.":"Documents submitted. Admin will verify within 24 hours."}</div>
         </div>
       </div>
     );
   }
 
-  const FilePick = ({ label, value, onChange }) => (
-    <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, background:"var(--ink3)", border:`1.5px dashed ${value?"var(--up)":"var(--ln2)"}`, borderRadius:14, padding:"24px 16px", cursor:"pointer", color:value?"var(--up)":"var(--t3)", fontSize:12, fontWeight:600, flex:1 }}>
-      <input type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{if(e.target.files?.[0])onChange(e.target.files[0].name);}}/>
-      {value ? <><span style={{fontSize:24}}>✓</span><span style={{fontSize:11,textAlign:"center",wordBreak:"break-all"}}>{value}</span></> : <><span style={{fontSize:28}}>+</span><span>{label}</span></>}
-    </label>
+  const FI = ({ id, label, value, onChange, placeholder, type="text", err }) => (
+    <div className="fg">
+      <label className="lbl">{label} <span style={{ color:"var(--dn)" }}>*</span></label>
+      <input className="inp" type={type} placeholder={placeholder} value={value} onChange={e => { onChange(e.target.value); ce(id); }} style={{ borderColor:err?"var(--dn)":"" }}/>
+      {err && <div style={{ fontSize:11, color:"var(--dn)", marginTop:5 }}>{err}</div>}
+    </div>
   );
 
-  const submit = () => {
-    const e = {};
-    if (!name.trim())  e.name  = "Required";
-    if (!phone.trim()) e.phone = "Required";
-    if (!idNum.trim()) e.idNum = "Required";
-    if (!front)        e.front = "Required";
-    if (!back)         e.back  = "Required";
-    if (Object.keys(e).length) { setErrs(e); return; }
-    setUser({ ...user, kycStatus:"pending", kycData:{docType,name,phone,idNum,front,back,selfie} });
-    addToast("KYC submitted — admin reviews within 24h","info");
-    onBack();
-  };
+  const FilePick = ({ id, label, value, onChange, err }) => (
+    <div className="fg">
+      <label className="lbl">{label} <span style={{ color:"var(--dn)" }}>*</span></label>
+      <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, background:"var(--ink2)", border:`1.5px dashed ${err?"var(--dn)":value?"var(--up)":"var(--ln2)"}`, borderRadius:"var(--r2)", padding:"18px 16px", cursor:"pointer", color:value?"var(--up)":"var(--t3)", fontSize:13, fontWeight:600 }}>
+        <input type="file" accept="image/*" style={{ display:"none" }} onChange={e => { if(e.target.files?.[0]){onChange(e.target.files[0].name);ce(id);} }}/>
+        {value ? <><span style={{ fontSize:18 }}>✓</span>{value}</> : <><span style={{ fontSize:20 }}>📷</span>Tap to upload</>}
+      </label>
+      {err && <div style={{ fontSize:11, color:"var(--dn)", marginTop:5 }}>{err}</div>}
+    </div>
+  );
 
   return (
     <div>
-      <BackHdr onBack={onBack} title="Identity Verification"/>
-      <div style={{ padding:"14px 16px" }}>
-        <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:16, padding:16, marginBottom:16 }}>
-          <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>Select your ID information</div>
-          <div className="fg">
-            <label className="lbl">Document Type</label>
-            <select className="inp" value={docType} onChange={e=>setDocType(e.target.value)} style={{padding:"13px 16px",fontSize:14}}>
-              {["Passport","National ID","Driver's License"].map(t=><option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-          <div className="fg">
-            <label className="lbl">Real Name</label>
-            <input className="inp" placeholder="Please enter your real name" value={name} onChange={e=>{setName(e.target.value);setErrs(p=>({...p,name:""}))}} style={{borderColor:errs.name?"var(--dn)":""}}/>
-            {errs.name&&<div style={{fontSize:11,color:"var(--dn)",marginTop:4}}>{errs.name}</div>}
-          </div>
-          <div className="fg">
-            <label className="lbl">Phone Number</label>
-            <input className="inp" type="tel" placeholder="Please enter phone number" value={phone} onChange={e=>{setPhone(e.target.value);setErrs(p=>({...p,phone:""}))}} style={{borderColor:errs.phone?"var(--dn)":""}}/>
-            {errs.phone&&<div style={{fontSize:11,color:"var(--dn)",marginTop:4}}>{errs.phone}</div>}
-          </div>
-          <div className="fg" style={{marginBottom:0}}>
-            <label className="lbl">ID Number</label>
-            <input className="inp" placeholder="Please enter ID number" value={idNum} onChange={e=>{setIdNum(e.target.value);setErrs(p=>({...p,idNum:""}))}} style={{borderColor:errs.idNum?"var(--dn)":""}}/>
-            {errs.idNum&&<div style={{fontSize:11,color:"var(--dn)",marginTop:4}}>{errs.idNum}</div>}
-          </div>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-          <FilePick label="Front of ID" value={front} onChange={setFront}/>
-          <FilePick label="Back of ID"  value={back}  onChange={setBack}/>
-        </div>
-        <div style={{ marginBottom:16 }}>
-          <FilePick label="Handheld ID Photo" value={selfie} onChange={setSelfie}/>
-        </div>
-        <button className="btn btn-gold btn-block" onClick={submit}>Submit Verification</button>
-        <div style={{ height:16 }}/>
+      <BackHdr onBack={onBack} title="KYC Verification"/>
+      <div style={{ background:"rgba(255,59,92,.06)", border:"1px solid rgba(255,59,92,.15)", borderRadius:12, padding:"12px 14px", marginBottom:18, fontSize:13, color:"var(--t2)", lineHeight:1.6 }}>
+        🔒 Required for deposits & withdrawals. Documents kept strictly confidential.
       </div>
+      <FI id="n" label="Full Name"    value={fullName} onChange={setFullName} placeholder="As on CNIC"            err={errs.n}/>
+      <FI id="a" label="Home Address" value={address}  onChange={setAddress}  placeholder="Street, City, Country" err={errs.a}/>
+      <FI id="p" label="Phone Number" value={phone}    onChange={setPhone}    placeholder="+92-300-0000000" type="tel" err={errs.p}/>
+      <FilePick id="f" label="CNIC Front Photo" value={cnicF} onChange={setCnicF} err={errs.f}/>
+      <FilePick id="b" label="CNIC Back Photo"  value={cnicB} onChange={setCnicB} err={errs.b}/>
+      <button className="btn btn-gold btn-block" onClick={submit}>Submit KYC Documents</button>
     </div>
   );
 }
 
-// ── Modify Login Password ──────────────────────────────
-function ModifyLoginPwScreen({ onBack, addToast }) {
-  const [old,  setOld]  = useState("");
-  const [nw,   setNw]   = useState("");
-  const [conf, setConf] = useState("");
-  const [so,   setSo]   = useState(false);
-  const [sn,   setSn]   = useState(false);
-  const [sc,   setSc]   = useState(false);
-  const [errs, setErrs] = useState({});
-
-  const pws = nw.length>=12?4:nw.length>=10?3:nw.length>=8?2:nw.length>0?1:0;
-  const pwc = ["","var(--dn)","var(--gold)","var(--gold2)","var(--up)"];
-
-  const submit = () => {
-    const e = {};
-    if (!old)             e.old  = "Enter old password";
-    if (!nw)              e.nw   = "Enter new password";
-    else if (nw.length<8) e.nw   = "Min 8 characters";
-    if (!conf)            e.conf = "Confirm your password";
-    else if (conf !== nw) e.conf = "Passwords don't match";
-    if (Object.keys(e).length) { setErrs(e); return; }
-    addToast("Password changed successfully", "ok");
-    onBack();
-  };
-
+function PushScreen({ onBack }) {
+  const [s, setS] = useState({ signals:true, trades:true, deposits:true, withdrawals:true, system:false });
   return (
     <div>
-      <BackHdr onBack={onBack} title="Modify Login Password"/>
-      <div style={{ padding:"14px 16px" }}>
-        <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:16, padding:16, marginBottom:16 }}>
-          {[
-            { label:"Old Password",         val:old,  set:setOld,  id:"old",  show:so, setShow:setSo },
-            { label:"New Password",          val:nw,   set:setNw,   id:"nw",   show:sn, setShow:setSn },
-            { label:"Confirm New Password",  val:conf, set:setConf, id:"conf", show:sc, setShow:setSc },
-          ].map(({ label, val, set, id, show, setShow }) => (
-            <div key={id} className="fg" style={{ borderBottom:id!=="conf"?"1px solid var(--ln)":"none", paddingBottom:id!=="conf"?14:0, marginBottom:id!=="conf"?14:0 }}>
-              <label className="lbl">{label}</label>
-              <div className="iw">
-                <input className="inp" type={show?"text":"password"} placeholder={`Please enter ${label.toLowerCase()}`}
-                  value={val} onChange={e=>{set(e.target.value);setErrs(p=>({...p,[id]:""}))}}/> 
-                <Eye show={show} toggle={()=>setShow(p=>!p)}/>
-              </div>
-              {errs[id]&&<div style={{fontSize:11,color:"var(--dn)",marginTop:4}}>{errs[id]}</div>}
+      <BackHdr onBack={onBack} title="Push Notifications"/>
+      <div className="card" style={{ padding:"0 16px" }}>
+        {[["signals","Signal Codes","New trade signal from admin"],["trades","Trade Completed","When your trade finishes"],["deposits","Deposit Updates","Approval / rejection"],["withdrawals","Withdrawal Updates","When payment is sent"],["system","System Alerts","Maintenance & updates"]].map(([id,label,sub],i,arr) => (
+          <div key={id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 0", borderBottom:i<arr.length-1?"1px solid var(--ln)":"none" }}>
+            <div><div style={{ fontWeight:700, fontSize:14 }}>{label}</div><div style={{ fontSize:11, color:"var(--t3)", marginTop:2 }}>{sub}</div></div>
+            <div onClick={() => setS(p=>({...p,[id]:!p[id]}))} style={{ width:46, height:26, borderRadius:13, cursor:"pointer", background:s[id]?"var(--gold)":"var(--ln2)", position:"relative", transition:"background .2s", flexShrink:0 }}>
+              <div style={{ position:"absolute", top:3, left:s[id]?23:3, width:20, height:20, borderRadius:"50%", background:"#fff", transition:"left .2s", boxShadow:"0 1px 4px rgba(0,0,0,.3)" }}/>
             </div>
-          ))}
-          {nw.length>0 && (
-            <div style={{marginTop:12}}>
-              <div style={{display:"flex",gap:3,marginBottom:4}}>{[1,2,3,4].map(i=><div key={i} style={{flex:1,height:3,borderRadius:2,background:i<=pws?pwc[pws]:"var(--ln2)",transition:"all .3s"}}/>)}</div>
-            </div>
-          )}
-        </div>
-        <button className="btn btn-gold btn-block" onClick={submit}>Submit</button>
-        <div style={{ height:16 }}/>
-      </div>
-    </div>
-  );
-}
-
-// ── Modify Transaction Password ────────────────────────
-function ModifyTxPwScreen({ onBack, addToast }) {
-  const [old,  setOld]  = useState("");
-  const [nw,   setNw]   = useState("");
-  const [conf, setConf] = useState("");
-  const [so,   setSo]   = useState(false);
-  const [sn,   setSn]   = useState(false);
-  const [sc,   setSc]   = useState(false);
-  const [errs, setErrs] = useState({});
-
-  const submit = () => {
-    const e = {};
-    if (!old)             e.old  = "Enter old password";
-    if (!nw)              e.nw   = "Enter new password";
-    if (!conf)            e.conf = "Confirm password";
-    else if (conf !== nw) e.conf = "Passwords don't match";
-    if (Object.keys(e).length) { setErrs(e); return; }
-    addToast("Transaction password changed", "ok");
-    onBack();
-  };
-
-  return (
-    <div>
-      <BackHdr onBack={onBack} title="Modify Transaction Password"/>
-      <div style={{ padding:"14px 16px" }}>
-        <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:16, padding:16, marginBottom:16 }}>
-          {[
-            { label:"Old Password",         val:old,  set:setOld,  id:"old",  show:so, setShow:setSo },
-            { label:"New Password",          val:nw,   set:setNw,   id:"nw",   show:sn, setShow:setSn },
-            { label:"Confirm New Password",  val:conf, set:setConf, id:"conf", show:sc, setShow:setSc },
-          ].map(({ label, val, set, id, show, setShow }) => (
-            <div key={id} className="fg" style={{ borderBottom:id!=="conf"?"1px solid var(--ln)":"none", paddingBottom:id!=="conf"?14:0, marginBottom:id!=="conf"?14:0 }}>
-              <label className="lbl">{label}</label>
-              <div className="iw">
-                <input className="inp" type={show?"text":"password"} placeholder={`Please enter ${label.toLowerCase()}`}
-                  value={val} onChange={e=>{set(e.target.value);setErrs(p=>({...p,[id]:""}))}}/> 
-                <Eye show={show} toggle={()=>setShow(p=>!p)}/>
-              </div>
-              {errs[id]&&<div style={{fontSize:11,color:"var(--dn)",marginTop:4}}>{errs[id]}</div>}
-            </div>
-          ))}
-        </div>
-        <button className="btn btn-gold btn-block" onClick={submit}>Submit</button>
-        <div style={{ height:16 }}/>
-      </div>
-    </div>
-  );
-}
-
-// ── Trade Details Screen ───────────────────────────────
-function TradeDetailsScreen({ onBack }) {
-  const { orderHistory } = useStore();
-  const [tab, setTab] = useState("contract");
-
-  const contractOrders = orderHistory.filter(o => o.type === "Futures");
-  const copyOrders     = orderHistory.filter(o => o.type === "Copy Trade");
-  const list           = tab === "contract" ? contractOrders : copyOrders;
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
-      <BackHdr onBack={onBack} title="Trade Details"/>
-
-      {/* Tabs */}
-      <div style={{ display:"flex", borderBottom:"1px solid var(--ln)", flexShrink:0 }}>
-        {[{id:"contract",label:"Contract Trade"},{id:"copy",label:"Copy Trading"}].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex:1, padding:"13px 0", background:"none", border:"none",
-              borderBottom:`2.5px solid ${tab===t.id?"var(--pu)":"transparent"}`,
-              color:tab===t.id?"var(--pu)":"var(--t3)",
-              fontFamily:"var(--f)", fontSize:14, fontWeight:700,
-              cursor:"pointer", transition:"all .2s" }}>
-            {t.label}
-          </button>
+          </div>
         ))}
       </div>
-
-      {/* List */}
-      <div style={{ flex:1, overflowY:"auto", padding:"0 16px" }}>
-        {list.length === 0 ? (
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"60%", gap:12 }}>
-            <div style={{ fontSize:56 }}>📭</div>
-            <div style={{ fontSize:15, fontWeight:700, color:"var(--t2)" }}>No Data</div>
-          </div>
-        ) : (
-          list.map((o) => {
-            const pp = (o.pnl ?? 0) >= 0;
-            return (
-              <div key={o.id} style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:14, padding:14, marginBottom:10, marginTop:10 }}>
-                {/* Top row */}
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                    <CoinIcon sym={o.coin} size={36}/>
-                    <div>
-                      <div style={{ fontWeight:700, fontSize:15 }}>{o.pair}</div>
-                      <div style={{ fontSize:11, color:"var(--t3)", fontFamily:"var(--m)", marginTop:2 }}>
-                        {o.openTime}{o.closeTime ? " → " + o.closeTime : ""}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ textAlign:"right" }}>
-                    <div style={{ fontFamily:"var(--m)", fontSize:17, fontWeight:900, color:pp?"var(--up)":"var(--dn)" }}>
-                      {pp?"+":""}{(o.pnl??0).toFixed(2)} USDT
-                    </div>
-                    <span className={`badge ${o.status==="CLOSED"?"b-dim":o.status==="LIQUIDATED"?"b-dn":"b-au"}`}
-                      style={{ fontSize:9, marginTop:4, display:"inline-block" }}>
-                      {o.status}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Detail grid */}
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
-                  {[
-                    ["Side",   o.side,                          o.side==="BUY"||o.side==="LONG"?"var(--up)":"var(--dn)"],
-                    ["Entry",  "$"+fmtP(o.coin, o.entryPrice), "var(--t2)"],
-                    ["Exit",   "$"+fmtP(o.coin, o.exitPrice),  "var(--t1)"],
-                    ["Type",   o.type,                          "var(--blue)"],
-                    ["Margin", "$"+(o.margin??0).toFixed(2),   "var(--t2)"],
-                    ["PnL %",  (o.pnlPct??0).toFixed(2)+"%",  pp?"var(--up)":"var(--dn)"],
-                  ].map(([l,v,c]) => (
-                    <div key={l} style={{ background:"var(--ink2)", borderRadius:10, padding:"8px 10px" }}>
-                      <div style={{ fontSize:9, color:"var(--t3)", fontFamily:"var(--m)", marginBottom:3 }}>{l}</div>
-                      <div style={{ fontSize:12, fontWeight:700, color:c }}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })
-        )}
-        <div style={{ height:16 }}/>
-      </div>
     </div>
   );
 }
 
-// ── Asset Records Screen ───────────────────────────────
-function AssetRecordsScreen({ onBack }) {
-  const { txHistory } = useStore();
-  const [tab, setTab] = useState("all");
-
-  const txLabel = {
-    deposit:"Deposit", withdrawal:"Withdraw",
-    trade_profit:"Trade Profit", transfer_in:"Transfer In", transfer_out:"Transfer Out"
-  };
-  const txIn = ["deposit","trade_profit","transfer_in"];
-
-  const typeIcon = {
-    deposit:"⬇️", withdrawal:"⬆️", trade_profit:"⚡", transfer_in:"↔️", transfer_out:"↔️"
-  };
-
-  const filtered = txHistory.filter(tx => {
-    if (tab==="all")      return true;
-    if (tab==="deposit")  return tx.type==="deposit";
-    if (tab==="withdraw") return tx.type==="withdrawal";
-    if (tab==="transfer") return tx.type==="transfer_in"||tx.type==="transfer_out";
-    return true;
-  });
-
+function TwoFAScreen({ onBack }) {
+  const [step, setStep] = useState(1), [otp, setOtp] = useState(""), [done, setDone] = useState(false), [err, setErr] = useState("");
+  const verify = () => { if(otp!=="123456"){setErr("Invalid. Demo code: 123456");return;} setDone(true); setStep(3); };
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
-      <BackHdr onBack={onBack} title="Asset Records"/>
-
-      {/* Tabs */}
-      <div style={{ display:"flex", borderBottom:"1px solid var(--ln)", flexShrink:0 }}>
-        {[
-          { id:"all",      label:"All"      },
-          { id:"deposit",  label:"Deposit"  },
-          { id:"withdraw", label:"Withdraw" },
-          { id:"transfer", label:"Transfer" },
-        ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex:1, padding:"13px 0", background:"none", border:"none",
-              borderBottom:`2.5px solid ${tab===t.id?"var(--pu)":"transparent"}`,
-              color:tab===t.id?"var(--pu)":"var(--t3)",
-              fontFamily:"var(--f)", fontSize:13, fontWeight:700,
-              cursor:"pointer", transition:"all .2s" }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* List */}
-      <div style={{ flex:1, overflowY:"auto", padding:"0 16px" }}>
-        {filtered.length === 0 ? (
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"60%", gap:12 }}>
-            <div style={{ fontSize:56 }}>📭</div>
-            <div style={{ fontSize:15, fontWeight:700, color:"var(--t2)" }}>No Data</div>
-          </div>
-        ) : (
-          filtered.map((tx, i) => {
-            const isIn = txIn.includes(tx.type);
-            return (
-              <div key={tx.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 0", borderBottom:"1px solid var(--ln)" }}>
-                {/* Icon */}
-                <div style={{ width:44, height:44, borderRadius:13, background:isIn?"rgba(0,200,150,.1)":"rgba(255,59,92,.1)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>
-                  {typeIcon[tx.type] ?? "📄"}
-                </div>
-                {/* Info */}
-                <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:700, fontSize:14 }}>{txLabel[tx.type] ?? tx.type}</div>
-                  <div style={{ fontSize:11, color:"var(--t3)", fontFamily:"var(--m)", marginTop:3 }}>
-                    {tx.date}
-                    {tx.network ? " · " + tx.network : ""}
-                    {tx.coin    ? " · " + tx.coin    : ""}
-                  </div>
-                </div>
-                {/* Amount + status */}
-                <div style={{ textAlign:"right", flexShrink:0 }}>
-                  <div style={{ fontFamily:"var(--m)", fontSize:15, fontWeight:700, color:isIn?"var(--up)":"var(--dn)" }}>
-                    {isIn?"+":"-"}${(tx.net ?? tx.amount ?? 0).toFixed(2)}
-                  </div>
-                  {tx.fee > 0 && (
-                    <div style={{ fontSize:10, color:"var(--t3)", marginTop:2 }}>fee -${tx.fee.toFixed(2)}</div>
-                  )}
-                  <span className={`badge ${tx.status==="completed"?"b-up":tx.status==="pending"?"b-au":"b-dn"}`}
-                    style={{ fontSize:9, marginTop:4, display:"inline-block" }}>
-                    {tx.status}
-                  </span>
-                </div>
-              </div>
-            );
-          })
-        )}
-        <div style={{ height:16 }}/>
-      </div>
+    <div>
+      <BackHdr onBack={onBack} title="Two-Factor Auth" right={<span className={`badge ${done?"b-up":"b-dim"}`}>{done?"ENABLED":"DISABLED"}</span>}/>
+      {step===1&&<div className="card" style={{padding:20,textAlign:"center"}}><div style={{fontSize:48,marginBottom:14}}>🔐</div><div style={{fontWeight:800,fontSize:16,marginBottom:8}}>Enable 2FA</div><div style={{fontSize:13,color:"var(--t2)",lineHeight:1.7,marginBottom:18}}>Secure your account with Google Authenticator.</div><button className="btn btn-gold btn-block" onClick={()=>setStep(2)}>Set Up 2FA</button></div>}
+      {step===2&&<div><div className="card" style={{padding:18,marginBottom:14,textAlign:"center"}}><div style={{width:140,height:140,background:"var(--ink2)",border:"1px solid var(--ln2)",borderRadius:12,margin:"0 auto 14px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"var(--t3)"}}>📱 QR Code</div><div style={{fontSize:12,color:"var(--t2)"}}>Key: <code style={{fontFamily:"var(--m)",color:"var(--gold)",letterSpacing:2}}>JBSWY3DPEHPK3PXP</code></div></div><div className="fg"><label className="lbl">Enter 6-Digit Code</label><input className="inp" placeholder="000000" maxLength={6} value={otp} onChange={e=>{setOtp(e.target.value);setErr("");}} style={{textAlign:"center",fontSize:24,letterSpacing:8,fontFamily:"var(--m)",borderColor:err?"var(--dn)":""}}/>{err&&<div style={{fontSize:11,color:"var(--dn)",marginTop:5,textAlign:"center"}}>{err}</div>}<div style={{fontSize:11,color:"var(--t3)",marginTop:5,textAlign:"center"}}>Demo: 123456</div></div><button className="btn btn-gold btn-block" onClick={verify} disabled={otp.length<6}>Verify & Enable</button></div>}
+      {step===3&&<div className="card" style={{padding:24,textAlign:"center"}}><div style={{fontSize:48,marginBottom:14}}>✅</div><div style={{fontWeight:800,fontSize:16,marginBottom:8}}>2FA Enabled!</div><div style={{fontSize:13,color:"var(--t2)"}}>Your account is now secured.</div></div>}
     </div>
   );
 }
 
-// ── Customer Service Screen ────────────────────────────
-function CustomerServiceScreen({ onBack }) {
+function SupportScreen({ onBack }) {
+  const TELEGRAM_LINK = "https://t.me/OctaTrade_Support";
   return (
     <div>
       <BackHdr onBack={onBack} title="Customer Service"/>
       <div style={{ padding:"24px 16px" }}>
-
         {/* Main Telegram card */}
         <div style={{ background:"linear-gradient(135deg,rgba(0,136,204,.12),rgba(0,136,204,.04))", border:"1px solid rgba(0,136,204,.25)", borderRadius:20, padding:24, marginBottom:16, textAlign:"center" }}>
           {/* Telegram logo */}
@@ -431,7 +143,6 @@ function CustomerServiceScreen({ onBack }) {
             Open Telegram →
           </a>
         </div>
-
         {/* Info cards */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
           {[
@@ -447,7 +158,6 @@ function CustomerServiceScreen({ onBack }) {
             </div>
           ))}
         </div>
-
         {/* FAQ hint */}
         <div style={{ background:"rgba(240,165,0,.06)", border:"1px solid rgba(240,165,0,.15)", borderRadius:14, padding:"14px 16px" }}>
           <div style={{ fontWeight:700, fontSize:14, marginBottom:8 }}>💡 Before contacting us</div>
@@ -458,260 +168,261 @@ function CustomerServiceScreen({ onBack }) {
             • Include your UID when messaging support
           </div>
         </div>
-
         <div style={{ height:16 }}/>
       </div>
     </div>
   );
 }
 
-// ── Share / Referral Screen ────────────────────────────
-function ShareScreen({ user, onBack }) {
-  const refCount = user.referralCount ?? 0;
-  const code     = user.referralCode ?? "NXT00000";
-  const link     = `https://nextrade.app/register?ref=${code}`;
-  const [copied, setCopied] = useState("");
-
-  const copy = (text, key) => {
-    navigator.clipboard?.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied(""), 2000);
-    useStore.getState().addToast("Copied!", "ok");
-  };
-
-  const days = Array.from({length:7}, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    return { date:d.toISOString().split("T")[0], count:0 };
-  }).reverse();
-
+function HelpScreen({ onBack }) {
+  const [open, setOpen] = useState(null);
+  const Q = [
+    ["How do I start trading?","Go to Trade → enter a signal code from the WhatsApp group → Submit. Trade runs 5 minutes and profit is credited to your Trading Account automatically."],
+    ["How do signal codes work?","Codes are generated by admin and shared via WhatsApp/Telegram. Each code is valid for 1 hour and can only be used once."],
+    ["How do I deposit?","Assets → Deposit → pick tier → pick network → send USDT → paste transaction hash. Admin reviews and credits your Funding Account."],
+    ["How long do deposits take?","1–2 hours after admin verifies your transaction hash."],
+    ["What is the 20-day freeze?","When you transfer from Funding to Trading Account, the funds are locked for 20 days. You can still trade, but cannot transfer out during this period."],
+    ["What are the fees?","Funding withdrawal: 5%. Trading→Funding transfer: 25%. Network fees vary."],
+    ["What is KYC?","Required for deposits and withdrawals. Submit full name, address, phone, and CNIC photos. Admin reviews within 24 hours."],
+    ["What is the referral program?","Share your code. When someone signs up and deposits, you earn a $5 bonus credited to your Funding Account."],
+    ["How do Futures work?","Select a pair, set leverage (1x–100x), enter margin, set TP/SL, and place LONG or SHORT. Positions auto-close at TP/SL/Liquidation price."],
+  ];
   return (
     <div>
-      <BackHdr onBack={onBack} title="Share with Friends"/>
-      <div style={{ padding:"14px 16px" }}>
-        {/* QR Code card */}
-        <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:16, padding:20, marginBottom:16, textAlign:"center" }}>
-          <div style={{ display:"inline-block", background:"#fff", borderRadius:12, padding:12, marginBottom:16 }}>
-            <svg viewBox="0 0 100 100" width={160} height={160}>
-              {Array.from({length:7}, (_, r) => Array.from({length:7}, (_, c) => (
-                <rect key={`${r}-${c}`} x={c*14+1} y={r*14+1} width={12} height={12}
-                  fill={(r<3&&c<3)||(r<3&&c>3&&c<7)||(r>3&&r<7&&c<3)||((r===3||c===3)&&(r+c)%2===0)?"#000":"#fff"}/>
-              )))}
-            </svg>
-          </div>
-          <button style={{ display:"inline-flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#a855f7,#7c3aed)", border:"none", borderRadius:20, padding:"10px 24px", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" }}>
-            ⬇ Click to save QR Code
+      <BackHdr onBack={onBack} title="Help Center"/>
+      {Q.map(([q,a],i) => (
+        <div key={i} style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:12, marginBottom:8, overflow:"hidden" }}>
+          <button onClick={() => setOpen(open===i?null:i)} style={{ width:"100%", padding:"14px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", fontFamily:"var(--f)", fontSize:13, fontWeight:700, color:open===i?"var(--gold)":"var(--t1)", textAlign:"left", gap:8 }}>
+            <span>{q}</span>
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform:open===i?"rotate(180deg)":"none", transition:"transform .2s", flexShrink:0 }}><polyline points="6 9 12 15 18 9"/></svg>
           </button>
+          {open===i && <div style={{ padding:"2px 16px 14px", fontSize:13, color:"var(--t2)", lineHeight:1.7, borderTop:"1px solid var(--ln)" }}>{a}</div>}
         </div>
+      ))}
+      <div style={{ height:8 }}/>
+    </div>
+  );
+}
 
-        {/* Referral stats */}
-        <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:16, padding:16, marginBottom:16 }}>
-          <div style={{ textAlign:"center", borderBottom:"1px solid var(--ln)", paddingBottom:14, marginBottom:14 }}>
-            <div style={{ fontSize:12, color:"var(--t3)", marginBottom:6 }}>Referral Count</div>
-            <div style={{ fontSize:32, fontWeight:900, fontFamily:"var(--m)" }}>{refCount}</div>
+function TeamScreen({ user, onBack }) {
+  const refs = user.referrals ?? [
+    { name:"Alice M.",  email:"a***@gmail.com", tier:"Tier 2", joined:"2025-01-10", earned:10, status:"active"  },
+    { name:"Bob W.",    email:"b***@gmail.com", tier:"Tier 3", joined:"2025-01-14", earned:5,  status:"active"  },
+    { name:"Carlos R.", email:"c***@gmail.com", tier:"Tier 1", joined:"2025-01-18", earned:5,  status:"pending" },
+  ];
+  const total = refs.reduce((s,r)=>s+r.earned,0);
+  return (
+    <div>
+      <BackHdr onBack={onBack} title="My Team"/>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:18 }}>
+        {[{label:"Members",value:refs.length,c:"var(--blue)"},{label:"Ref Earned",value:"$"+total,c:"var(--up)"},{label:"Active",value:refs.filter(r=>r.status==="active").length,c:"var(--gold)"}].map(s=>(
+          <div key={s.label} className="card2" style={{ padding:"14px 10px", textAlign:"center" }}>
+            <div style={{ fontFamily:"var(--m)", fontSize:22, fontWeight:900, color:s.c }}>{s.value}</div>
+            <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", marginTop:4, letterSpacing:".5px" }}>{s.label.toUpperCase()}</div>
           </div>
-          <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:11, color:"var(--t3)", marginBottom:6 }}>Invitation Code</div>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
-              <span style={{ fontFamily:"var(--m)", fontSize:18, fontWeight:700, color:"var(--t1)", letterSpacing:2 }}>{code}</span>
-              <button onClick={() => copy(code,"code")} style={{ background:"var(--ink4)", border:"1px solid var(--ln2)", borderRadius:8, padding:"6px 10px", color:"var(--t2)", cursor:"pointer", fontSize:16 }}>
-                {copied==="code" ? "✓" : "📋"}
-              </button>
-            </div>
+        ))}
+      </div>
+      <div style={{ background:"linear-gradient(135deg,rgba(240,165,0,.08),rgba(240,165,0,.03))", border:"1px solid rgba(240,165,0,.2)", borderRadius:14, padding:"14px 16px", marginBottom:18 }}>
+        <div style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>Your Referral Code</div>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <div style={{ flex:1, background:"var(--ink2)", border:"1px solid var(--ln2)", borderRadius:10, padding:"10px 14px", fontFamily:"var(--m)", fontSize:14, fontWeight:700, color:"var(--gold)", letterSpacing:2 }}>
+            {user.referralCode ?? "NXT00000"}
           </div>
-          <div>
-            <div style={{ fontSize:11, color:"var(--t3)", marginBottom:6 }}>Invitation Link</div>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
-              <span style={{ fontFamily:"var(--m)", fontSize:11, color:"var(--gold)", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{link}</span>
-              <button onClick={() => copy(link,"link")} style={{ background:"var(--ink4)", border:"1px solid var(--ln2)", borderRadius:8, padding:"6px 10px", color:"var(--t2)", cursor:"pointer", fontSize:16, flexShrink:0 }}>
-                {copied==="link" ? "✓" : "📋"}
-              </button>
-            </div>
-          </div>
+          <button className="btn btn-gold btn-sm" onClick={() => { navigator.clipboard?.writeText(user.referralCode??"NXT00000"); useStore.getState().addToast("Copied!","ok"); }}>Share</button>
         </div>
-
-        {/* 7-day activity */}
-        <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:16, padding:16 }}>
-          <div style={{ fontWeight:700, fontSize:15, marginBottom:14 }}>7-Day Team Activity</div>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
-            <span style={{ fontSize:12, color:"var(--t3)" }}>Date</span>
-            <span style={{ fontSize:12, color:"var(--t3)" }}>Direct/Sub New</span>
-          </div>
-          {days.map(d => (
-            <div key={d.date} style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderTop:"1px solid var(--ln)" }}>
-              <span style={{ fontSize:13, fontFamily:"var(--m)" }}>{d.date}</span>
-              <span style={{ fontSize:13, fontFamily:"var(--m)", color:"var(--t3)" }}>{d.count}</span>
+        <div style={{ fontSize:12, color:"var(--t2)", marginTop:8 }}>Earn <strong style={{ color:"var(--up)" }}>$5 bonus</strong> for every friend who deposits</div>
+      </div>
+      <div style={{ fontWeight:800, fontSize:15, marginBottom:12 }}>Team Members</div>
+      <div className="card" style={{ padding:"0 16px" }}>
+        {refs.length===0 ? <div className="empty"><div className="ei">👥</div><p>No referrals yet. Share your code!</p></div>
+          : refs.map((r,i)=>(
+            <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 0", borderBottom:i<refs.length-1?"1px solid var(--ln)":"none" }}>
+              <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,var(--gold),#c07800)", display:"flex", alignItems:"center", justifyContent:"center", color:"#000", fontWeight:900, fontSize:13, flexShrink:0 }}>
+                {r.name.split(" ").map(w=>w[0]).join("")}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontWeight:700, fontSize:13 }}>{r.name}</div>
+                <div style={{ fontSize:11, color:"var(--t3)", fontFamily:"var(--m)", marginTop:1 }}>{r.email} · {r.joined}</div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <span className={`badge ${r.status==="active"?"b-up":"b-au"}`} style={{ fontSize:10, marginBottom:4, display:"block" }}>{r.status}</span>
+                <div style={{ fontSize:11, color:"var(--up)", fontFamily:"var(--m)", fontWeight:700 }}>+${r.earned}</div>
+              </div>
             </div>
           ))}
-        </div>
-        <div style={{ height:16 }}/>
       </div>
+      <div style={{ height:8 }}/>
     </div>
   );
 }
 
-// ── Notifications Screen ───────────────────────────────
-function NotificationsScreen({ onBack }) {
-  const { notifs, markRead, markAllRead } = useStore();
-  const unread = notifs.filter(n => !n.read).length;
-  return (
-    <div>
-      <BackHdr onBack={onBack} title="Notifications"/>
-      <div style={{ padding:"14px 16px" }}>
-        {unread > 0 && (
-          <button className="btn btn-ghost btn-sm" style={{ marginBottom:12 }} onClick={markAllRead}>
-            Mark all as read
-          </button>
-        )}
-        {notifs.length === 0
-          ? <div className="empty" style={{ paddingTop:60 }}><div className="ei">🔔</div><p>No notifications</p></div>
-          : notifs.map(n => (
-            <div key={n.id} onClick={() => markRead(n.id)}
-              style={{ background:n.read?"var(--ink3)":"rgba(240,165,0,.05)", border:`1px solid ${n.read?"var(--ln)":"rgba(240,165,0,.2)"}`, borderRadius:14, padding:14, marginBottom:8, cursor:"pointer" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                <div style={{ fontWeight:700, fontSize:13 }}>{n.title}</div>
-                <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)" }}>{n.time}</div>
-              </div>
-              <div style={{ fontSize:12, color:"var(--t2)" }}>{n.body}</div>
-              {!n.read && <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--gold)", marginTop:8 }}/>}
-            </div>
-          ))
-        }
-        <div style={{ height:16 }}/>
-      </div>
-    </div>
-  );
-}
-
-// ── Main ProfilePage ───────────────────────────────────
-// screen + setScreen come from App.js — state lives there, not here
-export default function ProfilePage({ screen, setScreen }) {
-  const { user, setUser, logout, notifs, addToast } = useStore();
-
-  const unread   = notifs.filter(n => !n.read).length;
-  const refCount = user.referralCount ?? 0;
+// ─────────────────────────────────────────────────────────
+//  MAIN
+// ─────────────────────────────────────────────────────────
+export default function ProfilePage() {
+  const { user, setUser, logout, notifs, markRead, markAllRead, addToast, setShowAdmin, profileTab, setProfileTab, profileScreen, setProfileScreen } = useStore();
+  const [tab,    setTabL]  = useState(profileTab||"account");
+  const [screen, setScreen]= useState(null);
+  const unread   = notifs.filter(n=>!n.read).length;
+  const refCount = user.referralCount ?? (user.referrals?.length ?? 0);
   const lvInfo   = getRefLevel(refCount);
   const kycOk    = user.kycStatus === "approved";
+  const kycPend  = user.kycStatus === "pending";
+  const setTab = t => { setTabL(t); setProfileTab(t); };
 
-  // Screen registry
-  const SCREENS = {
-    kyc:      <KYCScreen              user={user} setUser={setUser} addToast={addToast} onBack={() => setScreen(null)}/>,
-    loginpw:  <ModifyLoginPwScreen    addToast={addToast} onBack={() => setScreen(null)}/>,
-    txpw:     <ModifyTxPwScreen       addToast={addToast} onBack={() => setScreen(null)}/>,
-    trades:   <TradeDetailsScreen     onBack={() => setScreen(null)}/>,
-    records:  <AssetRecordsScreen     onBack={() => setScreen(null)}/>,
-    support:  <CustomerServiceScreen  onBack={() => setScreen(null)}/>,
-    share:    <ShareScreen            user={user} onBack={() => setScreen(null)}/>,
-    notifs:   <NotificationsScreen    onBack={() => setScreen(null)}/>,
-  };
+  // Open screen when navigated from outside (e.g. HomePage goSupport)
+  useEffect(() => {
+    if (profileScreen) {
+      setScreen(profileScreen);
+      setProfileScreen(null);
+    }
+  }, [profileScreen]);
 
-  if (screen && SCREENS[screen]) return SCREENS[screen];
-
-  // ── Security items ─────────────────────────────────
-  const SECURITY_ITEMS = [
-    {
-      icon:"🔐", label:"Identity\nVerification", id:"kyc",
-      badge: kycOk ? "var(--up)" : user.kycStatus==="pending" ? "var(--gold)" : "var(--dn)",
-      badgeText: kycOk ? "✓" : user.kycStatus==="pending" ? "…" : "!",
-    },
-    { icon:"🔑", label:"Modify Login\nPassword",       id:"loginpw" },
-    { icon:"💳", label:"Modify Tx\nPassword",          id:"txpw"    },
-  ];
-
-  // ── General items (Settings + Admin removed) ────────
-  const GENERAL_ITEMS = [
-    { icon:"📋", label:"Trade\nDetails",  id:"trades"  },
-    { icon:"📊", label:"Asset\nRecords",  id:"records" },
-    { icon:"💬", label:"Customer\nService", id:"support" },
-    { icon:"🔗", label:"Share",           id:"share"   },
-    { icon:"🔔", label:"Notifications",   id:"notifs"  },
-  ];
+  const SCREENS = { kyc:KYCScreen, push:PushScreen, "2fa":TwoFAScreen, support:SupportScreen, help:HelpScreen, team:TeamScreen };
+  if (screen) {
+    const Comp = SCREENS[screen];
+    return (
+      <div>
+        <div className="hdr"><span style={{ fontSize:18, fontWeight:800 }}>&nbsp;</span></div>
+        <div style={{ padding:16 }}>
+          <Comp user={user} setUser={setUser} addToast={addToast} onBack={() => setScreen(null)}/>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <div className="hdr">
-        <span style={{ fontSize:18, fontWeight:800 }}>Mine</span>
-        {unread > 0 && <span className="badge b-dn" style={{ marginLeft:"auto" }}>{unread}</span>}
+        <span style={{ fontSize:18, fontWeight:800, letterSpacing:"-.4px" }}>Profile</span>
+        {unread>0 && <span className="badge b-dn" style={{ marginLeft:"auto" }}>{unread} new</span>}
       </div>
 
       {/* User card */}
-      <div style={{ padding:"20px 16px 18px", background:"linear-gradient(145deg,#0d1b2e,#081424)", borderBottom:"1px solid var(--ln)", display:"flex", alignItems:"center", gap:14 }}>
-        {/* Avatar with LV badge */}
-        <div style={{ position:"relative", flexShrink:0, marginBottom:8 }}>
-          <div style={{ width:64, height:64, borderRadius:20, background:"linear-gradient(135deg,var(--gold),#c07800)", display:"flex", alignItems:"center", justifyContent:"center", color:"#000", fontWeight:900, fontSize:22, border:`2.5px solid ${lvInfo.level>0?lvInfo.color:"var(--gold)"}` }}>
+      <div style={{ padding:"18px 16px", borderBottom:"1px solid var(--ln)", display:"flex", alignItems:"center", gap:14 }}>
+        <div style={{ position:"relative", flexShrink:0 }}>
+          <div style={{ width:58, height:58, borderRadius:17, background:"linear-gradient(135deg,var(--gold),#c07800)", display:"flex", alignItems:"center", justifyContent:"center", color:"#000", fontWeight:900, fontSize:20, boxShadow:"0 6px 20px rgba(240,165,0,.25)", border:lvInfo.level>0?`2.5px solid ${lvInfo.color}`:"none" }}>
             {user.avatar}
           </div>
-          <div style={{ position:"absolute", bottom:-9, left:"50%", transform:"translateX(-50%)", background:lvInfo.level>0?lvInfo.color:"var(--gold)", color:"#000", fontSize:9, fontWeight:900, fontFamily:"var(--m)", padding:"2px 7px", borderRadius:6, whiteSpace:"nowrap" }}>
-            {lvInfo.level>0 ? lvInfo.label : "LV.0"}
+          <div style={{ position:"absolute", bottom:-8, left:"50%", transform:"translateX(-50%)", background:lvInfo.level>0?lvInfo.color:"var(--ln2)", color:lvInfo.level>0?"#000":"var(--t3)", fontSize:8, fontWeight:900, fontFamily:"var(--m)", padding:"2px 7px", borderRadius:6, whiteSpace:"nowrap", boxShadow:"0 2px 6px rgba(0,0,0,.4)", textAlign:"center" }}>
+            {lvInfo.label}
           </div>
         </div>
-
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:15, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginBottom:6 }}>
-            {user.email || user.name}
+        <div style={{ flex:1, minWidth:0, paddingLeft:4 }}>
+          <div style={{ fontSize:17, fontWeight:800, letterSpacing:"-.3px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.name}</div>
+          <div style={{ fontSize:11, color:"var(--t3)", marginTop:2, fontFamily:"var(--m)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            @{user.username||user.email.split("@")[0]}{user.uid&&<span style={{ color:"var(--gold)", marginLeft:6 }}>· {user.uid}</span>}
           </div>
-          <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
-            {kycOk
-              ? <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:"rgba(0,200,150,.1)", border:"1px solid rgba(0,200,150,.25)", borderRadius:20, padding:"3px 8px", fontSize:10, fontWeight:700, color:"var(--up)" }}>
-                  <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>Verified
-                </span>
-              : <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:"rgba(255,165,0,.1)", border:"1px solid rgba(255,165,0,.25)", borderRadius:20, padding:"3px 8px", fontSize:10, fontWeight:700, color:"var(--gold)" }}>
-                  ⚠ Unverified
-                </span>
-            }
-            {lvInfo.level > 0 && (
-              <span style={{ display:"inline-flex", alignItems:"center", background:`${lvInfo.color}18`, border:`1px solid ${lvInfo.color}40`, borderRadius:20, padding:"3px 8px", fontSize:10, fontWeight:700, fontFamily:"var(--m)", color:lvInfo.color }}>
-                ★ {lvInfo.label}
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize:11, color:"var(--t3)", fontFamily:"var(--m)", marginTop:5 }}>
-            UID: {user.id?.slice(-7) ?? "0000000"}
+          <div style={{ display:"flex", gap:5, marginTop:7, flexWrap:"wrap" }}>
+            {user.tier&&<span className="badge b-au">{user.tier.name}</span>}
+            {kycOk  &&<span className="badge b-up"  style={{ fontSize:10 }}>✅ Verified</span>}
+            {kycPend&&<span className="badge b-au" style={{ fontSize:10 }}>⏳ KYC Pending</span>}
+            {!kycOk&&!kycPend&&<span className="badge b-dn" style={{ fontSize:10 }}>Unverified</span>}
+            <span style={{ display:"inline-flex", alignItems:"center", gap:3, background:lvInfo.level>0?lvInfo.color+"18":"rgba(255,255,255,.04)", border:`1px solid ${lvInfo.level>0?lvInfo.color+"40":"var(--ln)"}`, borderRadius:20, padding:"3px 9px", fontSize:10, fontWeight:900, fontFamily:"var(--m)", color:lvInfo.level>0?lvInfo.color:"var(--t3)" }}>
+              ★ {lvInfo.label}
+            </span>
           </div>
         </div>
+        <button onClick={logout} style={{ color:"var(--t3)", fontSize:12, fontWeight:600, flexShrink:0 }}>Sign Out</button>
       </div>
 
-      <div style={{ padding:"18px 16px" }}>
-
-        {/* Security section */}
-        <div style={{ fontSize:11, color:"var(--t3)", fontWeight:700, letterSpacing:"1.5px", marginBottom:12 }}>SECURITY</div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:22 }}>
-          {SECURITY_ITEMS.map(({ icon, label, id, badge, badgeText }) => (
-            <button key={id} onClick={() => setScreen(id)}
-              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:16, padding:"16px 8px", cursor:"pointer", position:"relative", transition:"all .2s" }}>
-              {badgeText && (
-                <span style={{ position:"absolute", top:7, right:7, width:17, height:17, borderRadius:"50%", background:badge, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:900, color:"#000" }}>
-                  {badgeText}
-                </span>
-              )}
-              <div style={{ width:44, height:44, borderRadius:13, background:"var(--ink2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>{icon}</div>
-              <span style={{ fontSize:10, fontWeight:600, color:"var(--t2)", textAlign:"center", lineHeight:1.4, whiteSpace:"pre-line" }}>{label}</span>
-            </button>
+      <div style={{ padding:"0 16px" }}>
+        <div className="seg" style={{ margin:"14px 0" }}>
+          {[{id:"account",label:"Account"},{id:"tiers",label:"Tiers"},{id:"notifs",label:unread>0?`Notifs (${unread})`:"Notifs"}].map(t=>(
+            <button key={t.id} className={`seg-btn${tab===t.id?" on":""}`} onClick={()=>setTab(t.id)}>{t.label}</button>
           ))}
         </div>
 
-        {/* General section */}
-        <div style={{ fontSize:11, color:"var(--t3)", fontWeight:700, letterSpacing:"1.5px", marginBottom:12 }}>GENERAL</div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:22 }}>
-          {GENERAL_ITEMS.map(({ icon, label, id }) => (
-            <button key={id} onClick={() => setScreen(id)}
-              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:16, padding:"14px 6px", cursor:"pointer", position:"relative" }}>
-              {id==="notifs" && unread > 0 && (
-                <span style={{ position:"absolute", top:6, right:6, width:16, height:16, borderRadius:"50%", background:"var(--dn)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:900, color:"#fff" }}>
-                  {unread}
-                </span>
-              )}
-              <div style={{ width:40, height:40, borderRadius:12, background:"var(--ink2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>{icon}</div>
-              <span style={{ fontSize:9, fontWeight:600, color:"var(--t2)", textAlign:"center", lineHeight:1.4, whiteSpace:"pre-line" }}>{label}</span>
-            </button>
-          ))}
-        </div>
+        {/* ── ACCOUNT ── */}
+        {tab==="account" && (
+          <div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+              {[{l:"FUNDING",v:"$"+(user.fundingBalance??0).toFixed(2),c:"var(--blue)"},{l:"TRADING",v:"$"+(user.tradingBalance??0).toFixed(2),c:"var(--up)"},{l:"TOTAL PROFIT",v:"+$"+(user.totalProfit??84.20).toFixed(2),c:"var(--up)"},{l:"TRADES",v:String(user.totalTrades??42),c:"var(--t1)"}].map(item=>(
+                <div key={item.l} className="astat">
+                  <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", marginBottom:6, letterSpacing:".8px" }}>{item.l}</div>
+                  <div style={{ fontSize:20, fontWeight:900, fontFamily:"var(--m)", color:item.c }}>{item.v}</div>
+                </div>
+              ))}
+            </div>
 
-        {/* Logout */}
-        <button className="btn btn-block" onClick={logout}
-          style={{ background:"transparent", border:"1px solid rgba(255,59,92,.4)", color:"var(--dn)", fontWeight:700, fontSize:15, borderRadius:14, padding:"14px 0" }}>
-          Logout
-        </button>
-        <div style={{ height:16 }}/>
+            <div className="card" style={{ padding:"0 16px", marginBottom:14 }}>
+              {[
+                {icon:"👥",label:"My Team",          sub:"Referrals & members",                                                                               id:"team"},
+                {icon:"🔔",label:"Push Notifications",sub:"Manage signal alerts",                                                                             id:"push"},
+                {icon:"🔒",label:"Two-Factor Auth",   sub:"Secure your account",                                                                              id:"2fa"},
+                {icon:"📋",label:"KYC Verification",  sub:user.kycStatus==="approved"?"Verified ✓":user.kycStatus==="pending"?"Under review...":"Submit docs", id:"kyc"},
+                {icon:"💬",label:"Live Support",       sub:"Chat with our team",                                                                               id:"support"},
+                {icon:"❓",label:"Help Center",        sub:"FAQs & guides",                                                                                    id:"help"},
+                // {icon:"🛡️",label:"Admin Panel",        sub:"Admin access only",                                                                                id:"admin"},
+              ].map(({icon,label,sub,id},i,arr)=>(
+                <div key={id} onClick={()=>id==="admin"?setShowAdmin(true):setScreen(id)} style={{ display:"flex", alignItems:"center", gap:12, padding:"13px 0", borderBottom:i<arr.length-1?"1px solid var(--ln)":"none", cursor:"pointer" }}>
+                  <div style={{ width:38, height:38, borderRadius:11, background:"var(--ink2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{icon}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:700, fontSize:14 }}>{label}</div>
+                    <div style={{ fontSize:11, color:"var(--t3)", marginTop:1 }}>{sub}</div>
+                  </div>
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="var(--t3)" strokeWidth="2.5" style={{ flexShrink:0 }}><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              ))}
+            </div>
+
+            <button className="btn btn-ghost btn-block" onClick={logout} style={{ color:"var(--dn)", border:"1px solid rgba(255,59,92,.2)", marginBottom:16 }}>Sign Out</button>
+          </div>
+        )}
+
+        {/* ── TIERS ── */}
+        {tab==="tiers" && (
+          <div>
+            <div style={{ background:lvInfo.level>0?lvInfo.color+"12":"rgba(255,255,255,.03)", border:`1px solid ${lvInfo.level>0?lvInfo.color+"30":"var(--ln)"}`, borderRadius:14, padding:"12px 16px", marginBottom:12, display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ width:44,height:44,borderRadius:13,background:lvInfo.level>0?lvInfo.color+"25":"var(--ln2)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--m)",fontSize:11,fontWeight:900,color:lvInfo.level>0?lvInfo.color:"var(--t3)",flexShrink:0 }}>{lvInfo.label}</div>
+              <div>
+                <div style={{ fontWeight:800, fontSize:14, color:lvInfo.level>0?lvInfo.color:"var(--t2)" }}>{lvInfo.level===0?"No Referral Level Yet":lvInfo.label+" Achieved"}</div>
+                <div style={{ fontSize:11, color:"var(--t3)", marginTop:2 }}>{refCount} referral{refCount!==1?"s":""} · Refer friends to level up</div>
+              </div>
+            </div>
+            <div style={{ background:"rgba(240,165,0,.06)", border:"1px solid rgba(240,165,0,.15)", borderRadius:12, padding:"12px 14px", marginBottom:14, fontSize:13, color:"var(--t2)", lineHeight:1.7 }}>
+              💡 Tier Price × 1% = profit per copy trade signal. Deposit to subscribe.
+            </div>
+            {TIERS.map(tier => {
+              const active = user.tier?.id===tier.id;
+              return (
+                <div key={tier.id} style={{ background:active?`linear-gradient(135deg,${tier.color}14,${tier.color}06)`:"var(--ink3)", border:`1.5px solid ${active?tier.color:"var(--ln)"}`, borderRadius:14, padding:"14px 16px", marginBottom:8, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <div>
+                    <div style={{ fontWeight:800, fontSize:14, color:tier.color, fontFamily:"var(--m)" }}>{tier.name}</div>
+                    <div style={{ fontSize:12, color:"var(--t2)", marginTop:2 }}>${tier.price} USDT</div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:18, fontWeight:900, color:"var(--up)", fontFamily:"var(--m)" }}>${tier.profit}</div>
+                      <div style={{ fontSize:10, color:"var(--t3)" }}>per signal</div>
+                    </div>
+                    {active && <span className="badge b-au" style={{ fontSize:10 }}>ACTIVE</span>}
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ height:8 }}/>
+          </div>
+        )}
+
+        {/* ── NOTIFS ── */}
+        {tab==="notifs" && (
+          <div>
+            {unread>0 && <button className="btn btn-ghost btn-sm" style={{ marginBottom:12 }} onClick={markAllRead}>Mark all as read</button>}
+            {notifs.length===0 ? <div className="empty"><div className="ei">🔔</div><p>No notifications</p></div>
+              : notifs.map(n=>(
+                <div key={n.id} onClick={()=>markRead(n.id)} style={{ background:n.read?"var(--ink3)":"rgba(240,165,0,.05)", border:`1px solid ${n.read?"var(--ln)":"rgba(240,165,0,.2)"}`, borderRadius:14, padding:14, marginBottom:8, cursor:"pointer", transition:"all .2s" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <div style={{ fontWeight:700, fontSize:13, flex:1 }}>{n.title}</div>
+                    <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", flexShrink:0, marginLeft:8 }}>{n.time}</div>
+                  </div>
+                  <div style={{ fontSize:12, color:"var(--t2)" }}>{n.body}</div>
+                  {!n.read && <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--gold)", marginTop:8 }}/>}
+                </div>
+              ))}
+            <div style={{ height:8 }}/>
+          </div>
+        )}
       </div>
     </div>
   );

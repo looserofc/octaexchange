@@ -9,8 +9,8 @@ export default function Logo({size="md"}){
           <path d="M12 8v8M8 12h8" stroke="#000" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
       </div>
-      <span style={{fontFamily:"'DM Sans',sans-serif",fontWeight:800,fontSize:fs,letterSpacing:"-.6px"}}>
-        Octa<span style={{color:"var(--gold)"}}>Trade</span>
+      <span style={{fontFamily:"var(--f)",fontWeight:800,fontSize:fs,letterSpacing:"-.6px"}}>
+        Octa<span style={{color:"var(--gold)"}}>Exchange</span>
       </span>
     </div>
   );

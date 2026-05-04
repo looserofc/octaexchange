@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
-import { COINS, fmtP } from "@/lib/data";
+import { COINS, fmtP, TIERS } from "@/lib/data";
 import MiniChart  from "@/components/ui/MiniChart";
 import CoinIcon   from "@/components/ui/CoinIcon";
 import Logo       from "@/components/ui/Logo";
@@ -23,34 +23,58 @@ function Spark({ data, color = "var(--up)" }) {
 function useProfitHist(total) {
   const pts=[]; let v=0;
   for(let i=0;i<14;i++){v=Math.max(0,v+Math.random()*(total/10)+(total/30));pts.push(parseFloat(v.toFixed(2)));}
-  pts[pts.length-1]=total; return pts;
+  pts[pts.length-1]=Math.max(total,0); return pts;
+}
+
+// ── Safe tier helper — handles both null and string tier ──
+function getTierDisplay(user) {
+  if (!user?.tier) return { name: "No Tier", profit: 0, color: "var(--t3)" };
+  // Backend returns tier as string: "Bronze","Silver","Gold","Platinum","Diamond"
+  const found = TIERS.find(t => t.backendName === user.tier || t.name === user.tier);
+  if (found) return { name: found.name, profit: found.profit, color: found.color };
+  return { name: user.tier, profit: 0, color: "var(--gold)" };
 }
 
 export default function HomePage({ setPage }) {
-  const { user, prices, charts, banners, notifs, setProfileTab } = useStore();
+  const { user, prices, charts, banners, notifs, setProfileTab, fetchNotifs } = useStore();
   const unread  = notifs.filter(n=>!n.read).length;
+  const tierInfo = getTierDisplay(user);
 
-  // Navigation helpers — setPage is the navigate function from App.js
-  const goDeposit  = () => { setPage("assets", { tab:"deposit"  }); };
-  const goWithdraw = () => { setPage("assets", { tab:"withdraw" }); };
-  const goTransfer = () => { setPage("assets", { tab:"transfer" }); };
-  const goSupport  = () => { setPage("profile", { screen:"support" }); };
-  const goCopyTrade = () => { setPage("trade"); };
-  const goFutures   = () => { setPage("futures"); };
-  const goAssets    = () => { setPage("assets"); };
-  const goProfile   = () => { setPage("profile"); };
+  const goDeposit  = () => setPage("assets", { tab:"deposit"  });
+  const goWithdraw = () => setPage("assets", { tab:"withdraw" });
+  const goTransfer = () => setPage("assets", { tab:"transfer" });
+  const goSupport  = () => setPage("profile", { screen:"support" });
+  const goCopyTrade = () => setPage("trade");
+  const goFutures   = () => setPage("futures");
+  const goAssets    = () => setPage("assets");
+  const goProfile   = () => setPage("profile");
 
-  const top5    = Object.values(COINS).slice(0,5);
-  const ppts    = useProfitHist(user.totalProfit??84.20);
-  const[greet,setGreet]=useState("Good morning");
-  useEffect(()=>{const h=new Date().getHours();if(h>=5&&h<12)setGreet("Good morning");else if(h<17)setGreet("Good afternoon");else if(h<21)setGreet("Good evening");else setGreet("Good night");},[]);
+  const top5 = Object.values(COINS).slice(0, 5);
+  const totalProfit = user?.totalProfit ?? 0;
+  const ppts = useProfitHist(totalProfit);
+  const [greet, setGreet] = useState("Good morning");
 
-  const fundBal  = user.fundingBalance  ?? 0;
-  const tradeBal = user.tradingBalance  ?? 0;
-  const freeze   = user.tradingFreezeUntil ?? 0;
-  const frozen   = Date.now() < freeze;
-  const fdays    = frozen ? Math.ceil((freeze-Date.now())/86400000) : 0;
-  const kycOk    = user.kycStatus==="approved";
+  useEffect(()=>{
+    const h=new Date().getHours();
+    if(h>=5&&h<12)setGreet("Good morning");
+    else if(h<17)setGreet("Good afternoon");
+    else if(h<21)setGreet("Good evening");
+    else setGreet("Good night");
+  },[]);
+
+  const fundBal  = user?.fundingBalance  ?? 0;
+  const tradeBal = user?.tradingBalance  ?? 0;
+  const kycOk    = user?.kycStatus === "approved";
+
+  // ── Build referral invite link ────────────────────────
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://octatrade.com";
+  const referralLink = user?.referralCode ? `${baseUrl}/ref/${user.referralCode}` : "";
+
+  const copyReferralLink = () => {
+    if (!referralLink) return;
+    navigator.clipboard?.writeText(referralLink);
+    useStore.getState().addToast("Referral link copied!", "ok");
+  };
 
   return(
     <div>
@@ -62,7 +86,7 @@ export default function HomePage({ setPage }) {
             {unread>0&&<span className="ndot"/>}
           </button>
           <button onClick={()=>setPage("profile")} style={{width:36,height:36,borderRadius:12,background:"linear-gradient(135deg,var(--gold),#c07800)",display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontWeight:900,fontSize:13,boxShadow:"0 4px 12px rgba(240,165,0,.3)"}}>
-            {user.avatar}
+            {user?.avatar || "?"}
           </button>
         </div>
       </div>
@@ -100,13 +124,11 @@ export default function HomePage({ setPage }) {
             <div style={{fontSize:9,color:"var(--blue2)",fontFamily:"var(--m)",letterSpacing:"1px",marginBottom:5}}>FUNDING</div>
             <div style={{fontSize:20,fontWeight:900,fontFamily:"var(--m)",letterSpacing:"-1px"}}>${fundBal.toLocaleString("en-US",{minimumFractionDigits:2})}</div>
             <div style={{fontSize:10,color:"var(--t3)",marginTop:3}}>5% withdrawal fee</div>
-
           </div>
           <div className="wt" style={{padding:16}}>
             <div style={{fontSize:9,color:"var(--up2)",fontFamily:"var(--m)",letterSpacing:"1px",marginBottom:5}}>TRADING</div>
             <div style={{fontSize:20,fontWeight:900,fontFamily:"var(--m)",letterSpacing:"-1px"}}>${tradeBal.toLocaleString("en-US",{minimumFractionDigits:2})}</div>
-            <div style={{fontSize:10,color:frozen?"var(--gold)":"var(--t3)",marginTop:3}}>{frozen?`🔒 ${fdays}d freeze`:"25% exit fee"}</div>
-
+            <div style={{fontSize:10,color:"var(--t3)",marginTop:3}}>25% exit fee</div>
           </div>
         </div>
 
@@ -133,12 +155,13 @@ export default function HomePage({ setPage }) {
         <div style={{padding:"12px 16px 0"}}>
           <div className="hero au" style={{padding:"18px 20px 0"}}>
             <div style={{position:"relative",zIndex:1}}>
-              <div style={{fontSize:11,color:"var(--t2)",marginBottom:4}}>{greet}, <strong style={{color:"var(--t1)"}}>{user.name?.split(" ")[0]}</strong> 👋</div>
+              <div style={{fontSize:11,color:"var(--t2)",marginBottom:4}}>{greet}, <strong style={{color:"var(--t1)"}}>{user?.username || user?.name?.split(" ")[0] || "Trader"}</strong> 👋</div>
               <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)",letterSpacing:"1.5px",marginBottom:4,textTransform:"uppercase"}}>Total Portfolio</div>
               <div style={{fontSize:34,fontWeight:900,fontFamily:"var(--m)",letterSpacing:"-1.5px",lineHeight:1}}>${(fundBal+tradeBal).toLocaleString("en-US",{minimumFractionDigits:2})}</div>
               <div style={{marginTop:8,marginBottom:16,display:"flex",gap:8,flexWrap:"wrap"}}>
-                <span className="badge b-up" style={{fontSize:12}}>▲ +${user.totalProfit?.toFixed(2)??0} profit</span>
-                <span className="badge b-au" style={{fontSize:11}}>{user.tier?.name} · +${user.tier?.profit??0}/trade</span>
+                <span className="badge b-up" style={{fontSize:12}}>▲ +${totalProfit.toFixed(2)} profit</span>
+                {/* Safe tier display — user.tier may be null */}
+                <span className="badge b-au" style={{fontSize:11}}>{tierInfo.name}{tierInfo.profit>0?` · +$${tierInfo.profit}/trade`:""}</span>
               </div>
               <div style={{display:"flex",gap:8,marginBottom:16}}>
                 <button className="btn btn-gold" style={{flex:1,padding:"10px 0",fontSize:12}} onClick={goCopyTrade}>⚡ Copy Trade</button>
@@ -153,7 +176,12 @@ export default function HomePage({ setPage }) {
         {/* Stats */}
         <div style={{padding:"14px 16px 0"}}>
           <div className="sx">
-            {[{label:"Trades",value:user.totalTrades??42,color:"var(--blue)",icon:"⚡",go:goCopyTrade},{label:"Profit",value:"$"+(user.totalProfit??84.20).toFixed(2),color:"var(--up)",icon:"💰",go:goCopyTrade},{label:"Team",value:user.referralCount??0,color:"var(--pu)",icon:"👥",go:goProfile},{label:"Tier",value:user.tier?.name??"No Tier",color:"var(--gold)",icon:"🏆",go:goDeposit}].map(s=>(
+            {[
+              {label:"Trades", value:user?.totalTrades??0,          color:"var(--blue)", icon:"⚡", go:goCopyTrade},
+              {label:"Profit", value:"$"+totalProfit.toFixed(2),     color:"var(--up)",   icon:"💰", go:goCopyTrade},
+              {label:"Team",   value:user?.referralCount??0,          color:"var(--pu)",   icon:"👥", go:goProfile},
+              {label:"Tier",   value:tierInfo.name,                   color:"var(--gold)", icon:"🏆", go:goDeposit},
+            ].map(s=>(
               <div key={s.label} className="sp" style={{minWidth:110,cursor:"pointer"}} onClick={s.go}>
                 <div style={{fontSize:18,marginBottom:6}}>{s.icon}</div>
                 <div style={{fontFamily:"var(--m)",fontSize:16,fontWeight:700,color:s.color}}>{s.value}</div>
@@ -166,22 +194,36 @@ export default function HomePage({ setPage }) {
         {/* Signal CTA */}
         <div style={{padding:"14px 16px 0"}}>
           <div onClick={goCopyTrade} style={{background:"linear-gradient(135deg,rgba(240,165,0,.1),rgba(192,120,0,.04))",border:"1px solid rgba(240,165,0,.2)",borderRadius:18,padding:"16px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"all .2s"}}>
-            <div><div style={{fontWeight:800,fontSize:15,marginBottom:3}}>⚡ Enter Signal Code</div><div style={{fontSize:12,color:"var(--t2)"}}>Paste your code from WhatsApp group</div></div>
+            <div>
+              <div style={{fontWeight:800,fontSize:15,marginBottom:3}}>⚡ Enter Signal Code</div>
+              <div style={{fontSize:12,color:"var(--t2)"}}>Start a copy trade with your code</div>
+            </div>
             <div style={{background:"linear-gradient(135deg,var(--gold),#c07800)",borderRadius:12,padding:"10px 18px",color:"#000",fontWeight:800,fontSize:13,flexShrink:0}}>Trade →</div>
           </div>
         </div>
 
-        {/* Referral */}
+        {/* Referral — shows full invite link */}
         <div style={{padding:"14px 16px 0"}}>
           <div style={{background:"linear-gradient(135deg,rgba(240,165,0,.08),rgba(240,165,0,.03))",border:"1px solid rgba(240,165,0,.2)",borderRadius:16,padding:"14px 16px"}} className="au d3">
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <div><div style={{fontWeight:800,fontSize:14}}>🎁 Refer & Earn</div><div style={{fontSize:12,color:"var(--t2)",marginTop:2}}>Invite friends, earn $5 per referral</div></div>
-              <span className="badge b-au" style={{fontSize:11}}>{user.referrals?.length??0} referred</span>
+              <div>
+                <div style={{fontWeight:800,fontSize:14}}>🎁 Refer & Earn</div>
+                <div style={{fontSize:12,color:"var(--t2)",marginTop:2}}>Share your link — friends auto-register with your code</div>
+              </div>
+              <span className="badge b-au" style={{fontSize:11}}>{user?.referralCount??0} referred</span>
             </div>
-            <div style={{background:"var(--ink2)",border:"1px solid var(--ln2)",borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <span style={{fontFamily:"var(--m)",fontSize:12,color:"var(--t2)",letterSpacing:1}}>REF: <strong style={{color:"var(--gold)"}}>{user.referralCode??"NXT00000"}</strong></span>
-              <button className="btn btn-gold btn-sm" style={{fontSize:11,padding:"6px 12px"}} onClick={()=>{navigator.clipboard?.writeText(user.referralCode??"NXT00000");useStore.getState().addToast("Referral code copied!","ok");}}>📋 Copy</button>
+            {/* Referral Code */}
+            <div style={{background:"var(--ink2)",border:"1px solid var(--ln2)",borderRadius:10,padding:"8px 12px",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <span style={{fontFamily:"var(--m)",fontSize:12,color:"var(--t2)",letterSpacing:1}}>CODE: <strong style={{color:"var(--gold)"}}>{user?.referralCode??"—"}</strong></span>
+              <button className="btn btn-gold btn-sm" style={{fontSize:11,padding:"4px 10px"}} onClick={()=>{navigator.clipboard?.writeText(user?.referralCode??"");useStore.getState().addToast("Code copied!","ok");}}>Copy Code</button>
             </div>
+            {/* Invite Link */}
+            {referralLink && (
+              <div style={{background:"var(--ink2)",border:"1px solid var(--ln2)",borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                <span style={{fontFamily:"var(--m)",fontSize:10,color:"var(--t3)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{referralLink}</span>
+                <button className="btn btn-outline btn-sm" style={{fontSize:11,padding:"4px 10px",flexShrink:0}} onClick={copyReferralLink}>🔗 Copy Link</button>
+              </div>
+            )}
           </div>
         </div>
 

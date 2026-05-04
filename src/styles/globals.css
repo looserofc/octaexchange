@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
 
 :root {
   --ink:   #07090f;  --ink2:  #0c1018;  --ink3:  #111622;
@@ -10,17 +10,18 @@
   --dn:    #ff3b5c;  --dn2:   #ff7090;
   --blue:  #2d9cff;  --blue2: #7cc4ff;
   --pu:    #a855f7;
-  --f: 'DM Sans',    sans-serif;
-  --m: 'Space Mono', monospace;
+  --f: 'Inter',       'Helvetica Neue', Arial, sans-serif;
+  --m: 'Inter',       'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
   --max: 500px;  --nav: 66px;  --hdr: 56px;
   --r: 18px;  --r2: 13px;  --r3: 9px;
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html{font-size:16px;-webkit-text-size-adjust:100%;}
-body{font-family:var(--f);background:var(--ink);color:var(--t1);min-height:100dvh;overflow:hidden;-webkit-font-smoothing:antialiased;}
+body{font-family:var(--f);background:var(--ink);color:var(--t1);min-height:100dvh;overflow:hidden;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-feature-settings:'kern' 1, 'tnum' 1, 'zero' 1; font-variant-numeric:lining-nums tabular-nums; font-variant-ligatures: contextual;}
 button{font-family:var(--f);cursor:pointer;border:none;outline:none;background:none;}
-input,select,textarea{font-family:var(--f);outline:none;border:none;background:none;color:var(--t1);}
+input,select,textarea{font-family:var(--f);outline:none;border:none;background:none;color:var(--t1);font-feature-settings:'tnum' 1, 'zero' 1; font-variant-numeric:lining-nums tabular-nums;}
 a{color:inherit;text-decoration:none;}
 
 /* Shell */

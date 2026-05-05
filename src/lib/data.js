@@ -32,14 +32,14 @@ export const COINS = {
 
 // ── Networks — updated fees: TRC20=$2, BEP20=$2, ERC20=$3 ─
 export const NETWORKS = [
-  {id:"trc20", name:"TRC20 (USDT)", fee:2, feeLabel:"$2",  min:10,  address:"TRc9WmJ4xV8nKpL3qRsD7fYbE2gHu6tNv"},
-  {id:"erc20", name:"ERC20 (USDT)", fee:3, feeLabel:"$3",  min:50,  address:"0x742d35Cc6634C0532925a3b8D4C9e7E4a5Bf8"},
-  {id:"bep20", name:"BEP20 (USDT)", fee:2, feeLabel:"$2",  min:10,  address:"0xBEP20abc123def456ghi789jkl012mno345pqr"},
+  {id:"trc20", name:"TRC20 (USDT)", fee:2, feeLabel:"$2",  min:10,  address:"TA3JYRziYUNCFbfVkmVXK1atU3fBD5j1oK"},
+  {id:"erc20", name:"ERC20 (USDT)", fee:3, feeLabel:"$3",  min:50,  address:"0xF598f9d8B16079Bd88c1229696118b8e32697D5f"},
+  {id:"bep20", name:"BEP20 (USDT)", fee:2, feeLabel:"$2",  min:10,  address:"0xF598f9d8B16079Bd88c1229696118b8e32697D5f"},
 ];
 
 export const PAIRS     = ["BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT"];
 export const LEVERAGES = [1,2,3,5,10,20,50,100];
-export const BANNERS_INIT = [{id:"b1",title:"🎉 Welcome to OctaExchange",text:"Start copy trading with signal codes today",color:"#f0a500",active:true}];
+export const BANNERS_INIT = [{id:"b1",title:"🎉 Welcome to OctaExchange",text:"Start your trading journey with us today",color:"#f0a500",active:true}];
 
 export const REF_LEVELS = [
   {level:0, label:"LV 0",  min:0,    max:0,      color:"#435070"},

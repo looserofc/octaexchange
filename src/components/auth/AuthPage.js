@@ -66,7 +66,7 @@ function OTPStep({email, onVerified, onBack}){
   };
 
   return(
-    <div style={{flex:1,padding:"0 20px 40px",maxWidth:440,margin:"0 auto",width:"100%"}}>
+    <div style={{flex:1,padding:"0 20px 40px",maxWidth:440,margin:"0 auto",width:"100%",overflowY:"auto"}}>
       <div style={{textAlign:"center",marginBottom:28}}>
         <div style={{width:64,height:64,borderRadius:20,background:"linear-gradient(135deg,rgba(240,165,0,.2),rgba(240,165,0,.05))",border:"1px solid rgba(240,165,0,.3)",margin:"0 auto 14px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>📧</div>
         <div style={{fontWeight:800,fontSize:20,marginBottom:6}}>Verify Your Email</div>

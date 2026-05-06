@@ -4,10 +4,10 @@ import { COINS, BANNERS_INIT, FUND_WD_FEE } from "./data";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 const GID = {BTC:"bitcoin",ETH:"ethereum",BNB:"binancecoin",SOL:"solana",XRP:"ripple",ADA:"cardano",DOGE:"dogecoin",AVAX:"avalanche-2",DOT:"polkadot",MATIC:"matic-network"};
 
-// ── Token in module scope + mirrored into Zustand._token ─
+// ── Token in module scope ─────────────────────────────────
 let _accessToken = null;
 
-// ✅ RESTORE TOKEN ON PAGE LOAD
+// ✅ FIX: Restore token on page load (no API call here — just memory restore)
 if (typeof window !== "undefined") {
   const savedToken = localStorage.getItem("accessToken");
   if (savedToken) {
@@ -17,15 +17,14 @@ if (typeof window !== "undefined") {
 
 function setTokenInternal(t) {
   _accessToken = t;
-
   if (typeof window !== "undefined") {
     if (t) localStorage.setItem("accessToken", t);
     else localStorage.removeItem("accessToken");
   }
-
   try { useStore.setState({ _token: t }); } catch (_) {}
 }
 
+// ✅ FIX: Guard refresh — only attempt if we actually have a token
 async function apiFetch(path, opts = {}) {
   const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
 
@@ -39,8 +38,10 @@ async function apiFetch(path, opts = {}) {
     credentials: "include",
   });
 
-  // 🔄 Auto refresh token
+  // 🔄 Auto refresh token — but ONLY if we have a token (prevents 401 spam on page load)
   if (res.status === 401 && !opts._retry) {
+    if (!_accessToken) return res; // ✅ No token = no refresh attempt = no console error
+
     try {
       const rr = await fetch(`${API}/auth/refresh`, {
         method: "POST",
@@ -50,8 +51,10 @@ async function apiFetch(path, opts = {}) {
       if (rr.ok) {
         const rd = await rr.json();
         setTokenInternal(rd.data?.accessToken || rd.accessToken);
-
         return apiFetch(path, { ...opts, _retry: true });
+      } else {
+        // Refresh failed — token is dead, clear it
+        setTokenInternal(null);
       }
     } catch (_) {}
   }
@@ -116,7 +119,6 @@ function timeAgo(date) {
   return Math.floor(diff/86400000)+"d ago";
 }
 
-// ── Map raw API transaction → frontend txHistory shape ────
 function mapTx(t) {
   let displayType = t.type;
   if (t.type === "transfer_out") {
@@ -151,7 +153,6 @@ function mapTx(t) {
   };
 }
 
-// ── Map raw API order → frontend orderHistory shape ────────
 function mapOrder(o) {
   return {
     id:         o._id,
@@ -184,13 +185,13 @@ export const useStore = create((set, get) => ({
   adminRole:null,      setAdminRole:r=>set({adminRole:r}),
   showAdmin:false,     setShowAdmin:v=>set({showAdmin:v}),
 
-  // ── Token (also in Zustand so AdminPanel's af() can read it) ──
+  // ── Token ─────────────────────────────────────────────────
   _token: null,
   setToken: (t) => { setTokenInternal(t); },
 
   user:null, setUser:u=>set({user:u}),
 
-  // ──── PENDING VOLUME STATE (NEW) ──────────────────────────
+  // ── Pending Volume ────────────────────────────────────────
   pendingVolume: {
     requirement: 0,
     current: 0,
@@ -200,6 +201,56 @@ export const useStore = create((set, get) => ({
     message: 'No active pending volume',
   },
   setPendingVolume: (pv) => set({ pendingVolume: pv }),
+
+  // ─────────────────────────────────────────────────────────
+  // ✅ NEW: RE-HYDRATE SESSION ON PAGE RELOAD
+  // Call this once from your _app.js or layout on mount
+  // ─────────────────────────────────────────────────────────
+  initSession: async () => {
+    if (!_accessToken) return; // No saved token — skip silently (no console errors)
+
+    try {
+      const res = await fetch(`${API}/auth/me`, {
+        headers: { "Authorization": `Bearer ${_accessToken}` },
+        credentials: "include",
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const user = data.data?.user || data.user;
+        if (!user) return;
+
+        if (user.role === "main_admin") {
+          get().setAdminAuthed(true);
+          get().setAdminRole("main");
+          get().setShowAdmin(true);
+          set({ user });
+          return;
+        }
+        if (user.role === "sub_admin") {
+          get().setAdminAuthed(true);
+          get().setAdminRole("second");
+          get().setShowAdmin(true);
+          set({ user });
+          return;
+        }
+
+        // Regular user — restore full session
+        set({ user: mapApiUser(user) });
+        get().fetchUserHistory();
+        get().fetchNotifs();
+        get().loadActiveTrades();
+        get().fetchPendingVolume();
+        get().startTradePolling();
+      } else {
+        // Token is expired/invalid — clear it cleanly (no console error)
+        setTokenInternal(null);
+      }
+    } catch (_) {
+      // Network error on init — clear stale token
+      setTokenInternal(null);
+    }
+  },
 
   // ─────────────────────────────────────────────────────────
   // FETCH USER HISTORY
@@ -219,14 +270,13 @@ export const useStore = create((set, get) => ({
       if (ordRes.ok) {
         const ordData = await ordRes.json();
         const mapped  = (ordData.data?.orders || []).map(mapOrder);
-        // Always replace with fresh DB data — never merge stale local data
         set({ orderHistory: mapped });
       }
     } catch (_) {}
   },
 
   // ─────────────────────────────────────────────────────────
-  // FETCH PENDING VOLUME (NEW)
+  // FETCH PENDING VOLUME
   // ─────────────────────────────────────────────────────────
   fetchPendingVolume: async () => {
     try {
@@ -266,12 +316,11 @@ export const useStore = create((set, get) => ({
 
       set({ user: mapApiUser(user) });
       addToast("Welcome back!", "ok");
-      // Load history + notifications + active trades + pending volume
       fetchUserHistory();
       fetchNotifs();
       loadActiveTrades();
-      fetchPendingVolume(); // ← NEW: Load pending volume
-      get().startTradePolling(); // ← auto-poll every 10s
+      fetchPendingVolume();
+      get().startTradePolling();
       return { success:true };
     } catch (_) {
       return { success:false, message:"Network error — is the server running?" };
@@ -294,7 +343,7 @@ export const useStore = create((set, get) => ({
       setTokenInternal(accessToken);
       set({ user: mapApiUser({...user, fullName:username, username}) });
       addToast("Welcome to OctaExchange! 🎉", "ok");
-      fetchPendingVolume(); // ← NEW: Load pending volume on register
+      fetchPendingVolume();
       return { success:true };
     } catch (_) {
       return { success:false, message:"Network error — is the server running?" };
@@ -307,12 +356,12 @@ export const useStore = create((set, get) => ({
   logout: async () => {
     try { await apiFetch("/auth/logout", { method:"POST" }); } catch (_) {}
     setTokenInternal(null);
-    get().stopTradePolling(); // ← stop polling on logout
+    get().stopTradePolling();
     set({
       user:null, adminAuthed:false, adminRole:null, showAdmin:false,
       page:"home", activeTrades:[], orderHistory:[], txHistory:[], notifs:[],
       _tradePoller: null,
-      pendingVolume: { requirement: 0, current: 0, remaining: 0, completed: false, progress: 0, message: 'No active pending volume' }, // ← RESET
+      pendingVolume: { requirement: 0, current: 0, remaining: 0, completed: false, progress: 0, message: 'No active pending volume' },
     });
   },
 
@@ -357,7 +406,7 @@ export const useStore = create((set, get) => ({
   },
 
   // ─────────────────────────────────────────────────────────
-  // ASSETS — Deposit / Withdraw / Transfer (UPDATED)
+  // ASSETS — Deposit / Withdraw / Transfer
   // ─────────────────────────────────────────────────────────
   submitDeposit: async ({ amount, network, txId }) => {
     const { addToast, addTx } = get();
@@ -388,7 +437,6 @@ export const useStore = create((set, get) => ({
     } catch (_) { addToast("Network error","err"); return {success:false}; }
   },
 
-  // UPDATED: Transfer to Trading (sets pending volume)
   transferToTrading: async (amount) => {
     const { addToast, addTx, user, setUser, fetchPendingVolume } = get();
     if (!user||amount<=0||amount>(user.fundingBalance||0)) { addToast("Insufficient funding balance","err"); return; }
@@ -398,32 +446,23 @@ export const useStore = create((set, get) => ({
       if (!res.ok) { addToast(data.message||"Transfer failed","err"); return; }
       const { fundingBalance, tradingBalance, pendingVolume } = data.data;
       setUser({...user, fundingBalance, tradingBalance});
-      
-      // Update pending volume state
       set({ pendingVolume });
-
       addTx({ id:"tx"+Date.now(), type:"transfer_in", label:"Transfer In", wallet:"trading", amount, fee:0, net:data.data.transferred||amount, note:`Pending Volume: Need $${pendingVolume.requirement.toFixed(2)} to transfer without fees`, status:"completed", date:new Date().toLocaleDateString() });
       addToast(`Transfer successful! Pending volume: $${pendingVolume.requirement.toFixed(2)} required`,"ok");
     } catch (_) { addToast("Network error","err"); }
   },
 
-  // UPDATED: Transfer to Funding (checks pending volume)
   transferToFunding: async (amount) => {
-    const { addToast, addTx, user, setUser, fetchPendingVolume } = get();
+    const { addToast, addTx, user, setUser } = get();
     if (!user||amount<=0||amount>(user.tradingBalance||0)) { addToast("Insufficient trading balance","err"); return; }
     try {
       const res  = await apiFetch("/transfer",{method:"POST",body:JSON.stringify({amount, direction:"trading_to_funding"})});
       const data = await res.json();
       if (!res.ok) { addToast(data.message||"Transfer failed","err"); return; }
-      
       const { fundingBalance, tradingBalance, feeApplied, fee, feePercentage, pendingVolume } = data.data;
       setUser({...user, fundingBalance, tradingBalance});
-
-      // Update pending volume state
       set({ pendingVolume });
-
       addTx({ id:"tx"+Date.now(), type:"transfer_out", label:"Transfer Out", wallet:"funding", amount, fee: fee || 0, net:amount-(fee||0), note:feeApplied ? `Transfer with ${feePercentage}% fee (pending volume incomplete)` : `Transfer with 0% fee (pending volume completed)`, status:"completed", date:new Date().toLocaleDateString() });
-      
       if (feeApplied) {
         addToast(`Transfer completed with ${feePercentage}% fee ($${fee.toFixed(2)}). Pending: $${pendingVolume.remaining.toFixed(2)} remaining.`,"info");
       } else {
@@ -438,12 +477,6 @@ export const useStore = create((set, get) => ({
   submitSignalCode: async (code) => {
     const { addToast, addTrade, user, prices } = get();
     if ((user?.tradingBalance??0)<=0) return {success:false, message:"Transfer funds to Trading Account first."};
-
-    // Map signal coin to store price key
-    const COIN_MAP = {
-      BTCUSDT:"BTC", ETHUSDT:"ETH", BNBUSDT:"BNB",
-      SOLUSDT:"SOL", XRPUSDT:"XRP",
-    };
     try {
       const res  = await apiFetch("/trade/copy/submit-signal",{method:"POST",body:JSON.stringify({signalCode:code, clientPrices: prices})});
       const data = await res.json();
@@ -485,39 +518,30 @@ export const useStore = create((set, get) => ({
     } catch (_) {}
   },
 
-  // ── Auto-poll active trades every 10 seconds ──────────
   _tradePoller: null,
   startTradePolling: () => {
     const { _tradePoller, loadActiveTrades, fetchUserHistory } = get();
-    if (_tradePoller) return; // already running
+    if (_tradePoller) return;
 
     const poll = async () => {
       const prevTrades = [...get().activeTrades];
       await loadActiveTrades();
       const currTrades = get().activeTrades;
-
-      // If a trade disappeared from active — it completed, reload history
       const prevIds = new Set(prevTrades.map(t => t.id));
       const currIds = new Set(currTrades.map(t => t.id));
       const completed = [...prevIds].some(id => !currIds.has(id));
       if (completed) {
-        // Wait 3 seconds for DB to fully commit exitPrice before fetching
-        setTimeout(() => {
-          get().fetchUserHistory();
-        }, 3000);
+        setTimeout(() => { get().fetchUserHistory(); }, 3000);
       }
     };
 
-    const id = setInterval(poll, 10000); // every 10 seconds
+    const id = setInterval(poll, 10000);
     set({ _tradePoller: id });
   },
 
   stopTradePolling: () => {
     const { _tradePoller } = get();
-    if (_tradePoller) {
-      clearInterval(_tradePoller);
-      set({ _tradePoller: null });
-    }
+    if (_tradePoller) { clearInterval(_tradePoller); set({ _tradePoller: null }); }
   },
 
   // ─────────────────────────────────────────────────────────
@@ -537,13 +561,8 @@ export const useStore = create((set, get) => ({
         type:  n.type,
       }));
       set({ notifs });
-
-      const hasNewBonus = notifications.some(
-        n => n.type === 'referral' && !n.isRead
-      );
-      if (hasNewBonus) {
-        get().refreshBalances();
-      }
+      const hasNewBonus = notifications.some(n => n.type === 'referral' && !n.isRead);
+      if (hasNewBonus) { get().refreshBalances(); }
     } catch (_) {}
   },
 
@@ -742,7 +761,8 @@ export const useStore = create((set, get) => ({
   },
 
   // ─────────────────────────────────────────────────────────
-  // PRICES / CHARTS
+  // ✅ FIXED: fetchRealPrices — proxy through your own backend
+  // to avoid CoinGecko CORS errors in the browser console
   // ─────────────────────────────────────────────────────────
   prices:buildPrices(),
   charts:buildCharts(),
@@ -751,12 +771,13 @@ export const useStore = create((set, get) => ({
 
   fetchRealPrices: async () => {
     try {
-      const ids  = Object.values(GID).join(",");
-      const r    = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`,{cache:"no-store"});
+      // ✅ Call your own backend /prices endpoint (avoids CORS block from CoinGecko)
+      // Make sure you add this route to your backend — see Railway Config guide below
+      const r = await fetch(`${API}/prices`, { cache: "no-store" });
       if (!r.ok) return;
       const data = await r.json();
-      const np   = {...get().prices};
-      Object.entries(GID).forEach(([sym,id])=>{ if(data[id]?.usd) np[sym]=data[id].usd; });
+      const np = {...get().prices};
+      Object.entries(GID).forEach(([sym,id]) => { if(data[id]?.usd) np[sym]=data[id].usd; });
       set({prices:np});
     } catch (_) {}
   },

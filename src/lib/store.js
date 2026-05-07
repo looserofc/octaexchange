@@ -210,10 +210,10 @@ export const useStore = create((set, get) => ({
     if (!_accessToken) return; // No saved token — skip silently (no console errors)
 
     try {
-      const res = await fetch(`${API}/auth/me`, {
-        headers: { "Authorization": `Bearer ${_accessToken}` },
-        credentials: "include",
-      });
+      const res = await fetch(`${API}/user/me`, {
+  headers: { "Authorization": `Bearer ${_accessToken}` },
+  credentials: "include",
+});
 
       if (res.ok) {
         const data = await res.json();
@@ -247,9 +247,8 @@ export const useStore = create((set, get) => ({
         setTokenInternal(null);
       }
     } catch (_) {
-      // Network error on init — clear stale token
-      setTokenInternal(null);
-    }
+  // Network error — don't clear token, user might just be offline temporarily
+}
   },
 
   // ─────────────────────────────────────────────────────────

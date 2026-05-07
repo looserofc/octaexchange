@@ -210,10 +210,7 @@ export const useStore = create((set, get) => ({
     if (!_accessToken) return; // No saved token — skip silently (no console errors)
 
     try {
-      const res = await fetch(`${API}/user/me`, {
-  headers: { "Authorization": `Bearer ${_accessToken}` },
-  credentials: "include",
-});
+      const res = await apiFetch('/user/me');
 
       if (res.ok) {
         const data = await res.json();

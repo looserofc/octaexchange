@@ -300,8 +300,16 @@ export const useStore = create((set, get) => ({
   },
 
   logout: async () => {
-    try { await apiFetch("/auth/logout", { method:"POST" }); } catch (_) {}
-    setTokenInternal(null, null);
+  try {
+    const refreshToken = typeof window !== "undefined"
+      ? localStorage.getItem("refreshToken")
+      : null;
+    await apiFetch("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
+    });
+  } catch (_) {}
+  setTokenInternal(null, null);
     get().stopTradePolling();
     set({
       user:null, adminAuthed:false, adminRole:null, showAdmin:false,

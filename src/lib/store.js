@@ -726,10 +726,14 @@ export const useStore = create((set, get) => ({
     const { addToast } = get();
     try {
       const body = {};
-      if (updates.fundBal   !== undefined) body.fundingBalance = updates.fundBal;
-      if (updates.tradeBal  !== undefined) body.tradingBalance = updates.tradeBal;
-      if (updates.kycStatus !== undefined) body.kycStatus      = updates.kycStatus;
-      if (updates.tier      !== undefined) body.tier           = updates.tier;
+if (updates.name      !== undefined) body.fullName        = updates.name;
+if (updates.email     !== undefined) body.email           = updates.email;
+if (updates.phone     !== undefined) body.phone           = updates.phone;
+if (updates.fundBal   !== undefined) body.fundingBalance  = updates.fundBal;
+if (updates.tradeBal  !== undefined) body.tradingBalance  = updates.tradeBal;
+if (updates.earnings  !== undefined) body.totalProfit     = updates.earnings;
+if (updates.kycStatus !== undefined) body.kycStatus       = updates.kycStatus;
+if (updates.tier      !== undefined) body.tier            = updates.tier;
       const res  = await apiFetch(`/admin/users/${userId}`,{method:"PUT",body:JSON.stringify(body)});
       const data = await res.json();
       if (res.ok) addToast("User updated ✅","ok"); else addToast(data.message||"Update failed","err");

@@ -397,7 +397,20 @@ export default function AdminPanel({onExit, role}){
   const fw = wds.filter(w=>!wQ||(q(w.user||"").includes(q(wQ))||q(w.address||"").includes(q(wQ))));
   const fk = kycs.filter(k=>!kQ||(q(k.user||"").includes(q(kQ))||q(k.email||"").includes(q(kQ))));
 
-  const saveU=async(u)=>{ await updateAdminUser(u.id,{fundBal:u.fundBal,tradeBal:u.tradeBal,kycStatus:u.kycStatus,tier:u.tier}); setUsers(p=>p.map(x=>x.id===u.id?{...x,...u}:x)); };
+  const saveU = async (u) => {
+  await updateAdminUser(u.id, {
+    name:      u.name,
+    email:     u.email,
+    phone:     u.phone,
+    fundBal:   u.fundBal,
+    tradeBal:  u.tradeBal,
+    earnings:  u.earnings,
+    withdrawn: u.withdrawn,
+    kycStatus: u.kycStatus,
+    tier:      u.tier,
+  });
+  setUsers(p => p.map(x => x.id === u.id ? {...x, ...u} : x));
+};
 
   const delU=async(id,name)=>{
     if(!window.confirm(`Delete ${name}? This cannot be undone.`))return;

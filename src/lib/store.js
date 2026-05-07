@@ -666,15 +666,16 @@ export const useStore = create((set, get) => ({
   _ct:{}, wick:null, setWick:w=>set({wick:w}),
 
   fetchRealPrices: async () => {
-    try {
-      const r = await fetch(`${API}/prices`, { cache: "no-store" });
-      if (!r.ok) return;
-      const data = await r.json();
-      const np = {...get().prices};
-      Object.entries(GID).forEach(([sym,id]) => { if(data[id]?.usd) np[sym]=data[id].usd; });
-      set({prices:np});
-    } catch (_) {}
-  },
+  try {
+    const ids = 'bitcoin,ethereum,binancecoin,solana,ripple,cardano,dogecoin,avalanche-2,polkadot,matic-network';
+    const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`, { cache: "no-store" });
+    if (!r.ok) return;
+    const data = await r.json();
+    const np = {...get().prices};
+    Object.entries(GID).forEach(([sym,id]) => { if(data[id]?.usd) np[sym]=data[id].usd; });
+    set({prices:np});
+  } catch (_) {}
+},
 
   tickPrices: () => {
     set(state => {

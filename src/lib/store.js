@@ -4,27 +4,28 @@ import { COINS, BANNERS_INIT, FUND_WD_FEE } from "./data";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 const GID = {BTC:"bitcoin",ETH:"ethereum",BNB:"binancecoin",SOL:"solana",XRP:"ripple",ADA:"cardano",DOGE:"dogecoin",AVAX:"avalanche-2",DOT:"polkadot",MATIC:"matic-network"};
 
-// ── Token in module scope ─────────────────────────────────
+// ── Tokens in module scope ────────────────────────────────
 let _accessToken = null;
 
-// ✅ FIX: Restore token on page load (no API call here — just memory restore)
 if (typeof window !== "undefined") {
   const savedToken = localStorage.getItem("accessToken");
-  if (savedToken) {
-    _accessToken = savedToken;
-  }
+  if (savedToken) _accessToken = savedToken;
 }
 
-function setTokenInternal(t) {
-  _accessToken = t;
+function setTokenInternal(accessToken, refreshToken) {
+  _accessToken = accessToken;
   if (typeof window !== "undefined") {
-    if (t) localStorage.setItem("accessToken", t);
+    if (accessToken) localStorage.setItem("accessToken", accessToken);
     else localStorage.removeItem("accessToken");
+
+    if (refreshToken !== undefined) {
+      if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+      else localStorage.removeItem("refreshToken");
+    }
   }
-  try { useStore.setState({ _token: t }); } catch (_) {}
+  try { useStore.setState({ _token: accessToken }); } catch (_) {}
 }
 
-// ✅ FIX: Guard refresh — only attempt if we actually have a token
 async function apiFetch(path, opts = {}) {
   const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
 
@@ -38,23 +39,29 @@ async function apiFetch(path, opts = {}) {
     credentials: "include",
   });
 
-  // 🔄 Auto refresh token — but ONLY if we have a token (prevents 401 spam on page load)
   if (res.status === 401 && !opts._retry) {
-    if (!_accessToken) return res; // ✅ No token = no refresh attempt = no console error
+    if (!_accessToken) return res;
 
     try {
+      const storedRefreshToken = typeof window !== "undefined"
+        ? localStorage.getItem("refreshToken")
+        : null;
+
       const rr = await fetch(`${API}/auth/refresh`, {
         method: "POST",
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: storedRefreshToken }),
       });
 
       if (rr.ok) {
         const rd = await rr.json();
-        setTokenInternal(rd.data?.accessToken || rd.accessToken);
+        const newAccess  = rd.data?.accessToken  || rd.accessToken;
+        const newRefresh = rd.data?.refreshToken || rd.refreshToken;
+        setTokenInternal(newAccess, newRefresh);
         return apiFetch(path, { ...opts, _retry: true });
       } else {
-        // Refresh failed — token is dead, clear it
-        setTokenInternal(null);
+        setTokenInternal(null, null);
       }
     } catch (_) {}
   }
@@ -62,7 +69,6 @@ async function apiFetch(path, opts = {}) {
   return res;
 }
 
-// ── Chart/price builders ──────────────────────────────────
 function buildCharts() {
   const o = {};
   Object.keys(COINS).forEach(sym => {
@@ -86,7 +92,6 @@ function buildCandles(sym) {
 }
 function buildPrices() { const p = {}; Object.keys(COINS).forEach(k => { p[k] = COINS[k].price; }); return p; }
 
-// ── Map API user to frontend user shape ───────────────────
 function mapApiUser(u) {
   const uid = "OCT" + (u._id || u.id || "").slice(-6).toUpperCase();
   return {
@@ -125,57 +130,32 @@ function mapTx(t) {
     displayType = t.toWallet === "trading" ? "transfer_in" : "transfer_out";
   }
   if (t.type === "trade_pnl") displayType = "trade_profit";
-
   const labelMap = {
-    deposit:        "Deposit",
-    withdrawal:     "Withdrawal",
-    transfer_in:    "Transfer In",
-    transfer_out:   "Transfer Out",
-    trade_profit:   "Trade Profit",
-    referral_bonus: "Referral Bonus",
+    deposit:"Deposit", withdrawal:"Withdrawal", transfer_in:"Transfer In",
+    transfer_out:"Transfer Out", trade_profit:"Trade Profit", referral_bonus:"Referral Bonus",
   };
-
   return {
-    id:      t._id,
-    type:    displayType,
-    label:   labelMap[displayType] || t.type,
-    wallet:  t.toWallet || t.fromWallet || "funding",
-    amount:  t.amount,
-    fee:     t.fee || 0,
-    net:     t.netAmount || t.amount,
-    network: t.network || "",
-    status:  t.status,
-    date:    t.createdAt?.split("T")[0] || new Date().toLocaleDateString(),
-    hash:    t.txId || "",
-    address: t.walletAddress || "",
-    coin:    t.coin || "",
-    note:    t.note || "",
+    id: t._id, type: displayType, label: labelMap[displayType] || t.type,
+    wallet: t.toWallet || t.fromWallet || "funding", amount: t.amount,
+    fee: t.fee || 0, net: t.netAmount || t.amount, network: t.network || "",
+    status: t.status, date: t.createdAt?.split("T")[0] || new Date().toLocaleDateString(),
+    hash: t.txId || "", address: t.walletAddress || "", coin: t.coin || "", note: t.note || "",
   };
 }
 
 function mapOrder(o) {
   return {
-    id:         o._id,
-    pair:       o.coin,
-    coin:       o.coin?.replace("USDT","") || "BTC",
-    type:       "Copy Trade",
-    side:       o.direction === "LONG" ? "BUY" : "SELL",
-    code:       o.signalCode || "",
-    entryPrice: o.entryPrice ?? 0,
-    exitPrice:  o.exitPrice  ?? 0,
-    qty:        0,
-    leverage:   1,
-    margin:     0,
-    pnl:        o.profitAmount   || 0,
-    pnlPct:     o.profitPercent  || 1,
-    status:     o.status === "completed" ? "CLOSED" : (o.status || "CLOSED").toUpperCase(),
-    openTime:   o.openedAt ? new Date(o.openedAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "",
-    closeTime:  o.closedAt ? new Date(o.closedAt).toLocaleString("en-US",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "",
+    id: o._id, pair: o.coin, coin: o.coin?.replace("USDT","") || "BTC",
+    type: "Copy Trade", side: o.direction === "LONG" ? "BUY" : "SELL",
+    code: o.signalCode || "", entryPrice: o.entryPrice ?? 0, exitPrice: o.exitPrice ?? 0,
+    qty: 0, leverage: 1, margin: 0, pnl: o.profitAmount || 0, pnlPct: o.profitPercent || 1,
+    status: o.status === "completed" ? "CLOSED" : (o.status || "CLOSED").toUpperCase(),
+    openTime: o.openedAt ? new Date(o.openedAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "",
+    closeTime: o.closedAt ? new Date(o.closedAt).toLocaleString("en-US",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "",
   };
 }
 
 export const useStore = create((set, get) => ({
-  // ── Navigation ────────────────────────────────────────────
   page:"home",         setPage:p=>set({page:p}),
   assetsTab:"overview",setAssetsTab:t=>set({assetsTab:t}),
   tradeTab:"copy",     setTradeTab:t=>set({tradeTab:t}),
@@ -185,29 +165,19 @@ export const useStore = create((set, get) => ({
   adminRole:null,      setAdminRole:r=>set({adminRole:r}),
   showAdmin:false,     setShowAdmin:v=>set({showAdmin:v}),
 
-  // ── Token ─────────────────────────────────────────────────
   _token: null,
   setToken: (t) => { setTokenInternal(t); },
 
   user:null, setUser:u=>set({user:u}),
 
-  // ── Pending Volume ────────────────────────────────────────
   pendingVolume: {
-    requirement: 0,
-    current: 0,
-    remaining: 0,
-    completed: false,
-    progress: 0,
-    message: 'No active pending volume',
+    requirement: 0, current: 0, remaining: 0,
+    completed: false, progress: 0, message: 'No active pending volume',
   },
   setPendingVolume: (pv) => set({ pendingVolume: pv }),
 
-  // ─────────────────────────────────────────────────────────
-  // ✅ NEW: RE-HYDRATE SESSION ON PAGE RELOAD
-  // Call this once from your _app.js or layout on mount
-  // ─────────────────────────────────────────────────────────
   initSession: async () => {
-    if (!_accessToken) return; // No saved token — skip silently (no console errors)
+    if (!_accessToken) return;
 
     try {
       const res = await apiFetch('/user/me');
@@ -232,7 +202,6 @@ export const useStore = create((set, get) => ({
           return;
         }
 
-        // Regular user — restore full session
         set({ user: mapApiUser(user) });
         get().fetchUserHistory();
         get().fetchNotifs();
@@ -240,40 +209,30 @@ export const useStore = create((set, get) => ({
         get().fetchPendingVolume();
         get().startTradePolling();
       } else {
-        // Token is expired/invalid — clear it cleanly (no console error)
-        setTokenInternal(null);
+        setTokenInternal(null, null);
       }
     } catch (_) {
-  // Network error — don't clear token, user might just be offline temporarily
-}
+      // Network error — keep token, don't log user out
+    }
   },
 
-  // ─────────────────────────────────────────────────────────
-  // FETCH USER HISTORY
-  // ─────────────────────────────────────────────────────────
   fetchUserHistory: async () => {
     try {
       const txRes = await apiFetch("/user/transactions?limit=50");
       if (txRes.ok) {
-        const txData  = await txRes.json();
-        const mapped  = (txData.data?.transactions || []).map(mapTx);
-        set({ txHistory: mapped });
+        const txData = await txRes.json();
+        set({ txHistory: (txData.data?.transactions || []).map(mapTx) });
       }
     } catch (_) {}
-
     try {
       const ordRes = await apiFetch("/trade/copy/history?limit=30");
       if (ordRes.ok) {
         const ordData = await ordRes.json();
-        const mapped  = (ordData.data?.orders || []).map(mapOrder);
-        set({ orderHistory: mapped });
+        set({ orderHistory: (ordData.data?.orders || []).map(mapOrder) });
       }
     } catch (_) {}
   },
 
-  // ─────────────────────────────────────────────────────────
-  // FETCH PENDING VOLUME
-  // ─────────────────────────────────────────────────────────
   fetchPendingVolume: async () => {
     try {
       const res = await apiFetch("/user/pending-volume");
@@ -283,21 +242,18 @@ export const useStore = create((set, get) => ({
     } catch (_) {}
   },
 
-  // ─────────────────────────────────────────────────────────
-  // LOGIN
-  // ─────────────────────────────────────────────────────────
   login: async (email, password) => {
     const { addToast, setAdminAuthed, setAdminRole, setShowAdmin, fetchUserHistory, fetchNotifs, loadActiveTrades, fetchPendingVolume } = get();
     try {
-      const res  = await fetch(`${API}/auth/login`, {
+      const res = await fetch(`${API}/auth/login`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         credentials:"include", body:JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) return { success:false, message: data.message||"Invalid email or password" };
 
-      const { accessToken, user } = data.data;
-      setTokenInternal(accessToken);
+      const { accessToken, refreshToken, user } = data.data;
+      setTokenInternal(accessToken, refreshToken);
 
       if (user.role === "main_admin") {
         setAdminAuthed(true); setAdminRole("main"); setShowAdmin(true);
@@ -323,20 +279,17 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  // ─────────────────────────────────────────────────────────
-  // REGISTER
-  // ─────────────────────────────────────────────────────────
   register: async (username, email, password, referralCode) => {
     const { addToast, fetchPendingVolume } = get();
     try {
-      const res  = await fetch(`${API}/auth/register`, {
+      const res = await fetch(`${API}/auth/register`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         credentials:"include", body:JSON.stringify({ fullName:username, email, password, referralCode }),
       });
       const data = await res.json();
       if (!res.ok) return { success:false, message:data.message||"Registration failed" };
-      const { accessToken, user } = data.data;
-      setTokenInternal(accessToken);
+      const { accessToken, refreshToken, user } = data.data;
+      setTokenInternal(accessToken, refreshToken);
       set({ user: mapApiUser({...user, fullName:username, username}) });
       addToast("Welcome to OctaExchange! 🎉", "ok");
       fetchPendingVolume();
@@ -346,18 +299,15 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  // ─────────────────────────────────────────────────────────
-  // LOGOUT
-  // ─────────────────────────────────────────────────────────
   logout: async () => {
     try { await apiFetch("/auth/logout", { method:"POST" }); } catch (_) {}
-    setTokenInternal(null);
+    setTokenInternal(null, null);
     get().stopTradePolling();
     set({
       user:null, adminAuthed:false, adminRole:null, showAdmin:false,
       page:"home", activeTrades:[], orderHistory:[], txHistory:[], notifs:[],
       _tradePoller: null,
-      pendingVolume: { requirement: 0, current: 0, remaining: 0, completed: false, progress: 0, message: 'No active pending volume' },
+      pendingVolume: { requirement:0, current:0, remaining:0, completed:false, progress:0, message:'No active pending volume' },
     });
   },
 
@@ -394,21 +344,18 @@ export const useStore = create((set, get) => ({
   resetPassword: async (email, otp, newPassword) => {
     const { addToast } = get();
     try {
-      const res  = await apiFetch("/auth/reset-password",{method:"POST",body:JSON.stringify({email,otp,newPassword})});
+      const res = await apiFetch("/auth/reset-password",{method:"POST",body:JSON.stringify({email,otp,newPassword})});
       const data = await res.json();
       if (res.ok) addToast("Password reset! Please log in.","ok");
       return {success:res.ok, message:data.message};
     } catch (_) { return {success:false, message:"Network error"}; }
   },
 
-  // ─────────────────────────────────────────────────────────
-  // ASSETS — Deposit / Withdraw / Transfer
-  // ─────────────────────────────────────────────────────────
   submitDeposit: async ({ amount, network, txId }) => {
     const { addToast, addTx } = get();
     try {
       const netMap = {trc20:"TRC20",erc20:"ERC20",bep20:"BEP20"};
-      const res  = await apiFetch("/deposit/submit",{method:"POST",body:JSON.stringify({amount, network:netMap[network]||network.toUpperCase(), txId})});
+      const res = await apiFetch("/deposit/submit",{method:"POST",body:JSON.stringify({amount, network:netMap[network]||network.toUpperCase(), txId})});
       const data = await res.json();
       if (!res.ok) { addToast(data.message||"Deposit failed","err"); return {success:false, message:data.message}; }
       addTx({ id:"tx"+Date.now(), type:"deposit", label:"Deposit", wallet:"funding", amount, fee:0, net:amount, network:network.toUpperCase(), status:"pending", date:new Date().toLocaleDateString(), hash:txId });
@@ -421,7 +368,7 @@ export const useStore = create((set, get) => ({
     const { addToast, addTx, user, setUser } = get();
     try {
       const netMap = {trc20:"TRC20",erc20:"ERC20",bep20:"BEP20"};
-      const res  = await apiFetch("/withdraw/submit",{method:"POST",body:JSON.stringify({amount, network:netMap[network]||network.toUpperCase(), walletAddress})});
+      const res = await apiFetch("/withdraw/submit",{method:"POST",body:JSON.stringify({amount, network:netMap[network]||network.toUpperCase(), walletAddress})});
       const data = await res.json();
       if (!res.ok) { addToast(data.message||"Withdrawal failed","err"); return {success:false, message:data.message}; }
       const newFundBal = data.data?.fundingBalance ?? (user.fundingBalance - amount);
@@ -437,7 +384,7 @@ export const useStore = create((set, get) => ({
     const { addToast, addTx, user, setUser, fetchPendingVolume } = get();
     if (!user||amount<=0||amount>(user.fundingBalance||0)) { addToast("Insufficient funding balance","err"); return; }
     try {
-      const res  = await apiFetch("/transfer",{method:"POST",body:JSON.stringify({amount, direction:"funding_to_trading"})});
+      const res = await apiFetch("/transfer",{method:"POST",body:JSON.stringify({amount, direction:"funding_to_trading"})});
       const data = await res.json();
       if (!res.ok) { addToast(data.message||"Transfer failed","err"); return; }
       const { fundingBalance, tradingBalance, pendingVolume } = data.data;
@@ -452,32 +399,26 @@ export const useStore = create((set, get) => ({
     const { addToast, addTx, user, setUser } = get();
     if (!user||amount<=0||amount>(user.tradingBalance||0)) { addToast("Insufficient trading balance","err"); return; }
     try {
-      const res  = await apiFetch("/transfer",{method:"POST",body:JSON.stringify({amount, direction:"trading_to_funding"})});
+      const res = await apiFetch("/transfer",{method:"POST",body:JSON.stringify({amount, direction:"trading_to_funding"})});
       const data = await res.json();
       if (!res.ok) { addToast(data.message||"Transfer failed","err"); return; }
       const { fundingBalance, tradingBalance, feeApplied, fee, feePercentage, pendingVolume } = data.data;
       setUser({...user, fundingBalance, tradingBalance});
       set({ pendingVolume });
-      addTx({ id:"tx"+Date.now(), type:"transfer_out", label:"Transfer Out", wallet:"funding", amount, fee: fee || 0, net:amount-(fee||0), note:feeApplied ? `Transfer with ${feePercentage}% fee (pending volume incomplete)` : `Transfer with 0% fee (pending volume completed)`, status:"completed", date:new Date().toLocaleDateString() });
-      if (feeApplied) {
-        addToast(`Transfer completed with ${feePercentage}% fee ($${fee.toFixed(2)}). Pending: $${pendingVolume.remaining.toFixed(2)} remaining.`,"info");
-      } else {
-        addToast(`Transfer completed with 0% fee! ✅`,"ok");
-      }
+      addTx({ id:"tx"+Date.now(), type:"transfer_out", label:"Transfer Out", wallet:"funding", amount, fee:fee||0, net:amount-(fee||0), note:feeApplied?`Transfer with ${feePercentage}% fee (pending volume incomplete)`:`Transfer with 0% fee (pending volume completed)`, status:"completed", date:new Date().toLocaleDateString() });
+      if (feeApplied) addToast(`Transfer completed with ${feePercentage}% fee ($${fee.toFixed(2)}). Pending: $${pendingVolume.remaining.toFixed(2)} remaining.`,"info");
+      else addToast(`Transfer completed with 0% fee! ✅`,"ok");
     } catch (_) { addToast("Network error","err"); }
   },
 
-  // ─────────────────────────────────────────────────────────
-  // COPY TRADE
-  // ─────────────────────────────────────────────────────────
   submitSignalCode: async (code) => {
     const { addToast, addTrade, user, prices } = get();
     if ((user?.tradingBalance??0)<=0) return {success:false, message:"Transfer funds to Trading Account first."};
     try {
-      const res  = await apiFetch("/trade/copy/submit-signal",{method:"POST",body:JSON.stringify({signalCode:code, clientPrices: prices})});
+      const res = await apiFetch("/trade/copy/submit-signal",{method:"POST",body:JSON.stringify({signalCode:code, clientPrices:prices})});
       const data = await res.json();
       if (!res.ok) return {success:false, message:data.message||"Invalid signal code"};
-      const order   = data.data.order;
+      const order = data.data.order;
       const coinSym = order.coin?.replace("USDT","")||"BTC";
       addTrade({
         id:order._id, pair:order.coin, coin:coinSym,
@@ -498,17 +439,11 @@ export const useStore = create((set, get) => ({
       if (!res.ok) return;
       const data = await res.json();
       const trades = (data.data?.orders || []).map(order => ({
-        id: order._id,
-        pair: order.coin,
-        coin: order.coin?.replace("USDT", "") || "BTC",
-        code: order.signalCode,
-        profit: order.profitAmount,
-        side: order.direction === "LONG" ? "BUY" : "SELL",
-        entry: order.entryPrice || 0,
-        qty: 0,
-        openTime: new Date(order.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-        expiresAt: order.expiresAt,
-        _apiId: order._id,
+        id:order._id, pair:order.coin, coin:order.coin?.replace("USDT","")||"BTC",
+        code:order.signalCode, profit:order.profitAmount,
+        side:order.direction==="LONG"?"BUY":"SELL", entry:order.entryPrice||0, qty:0,
+        openTime:new Date(order.createdAt).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}),
+        expiresAt:order.expiresAt, _apiId:order._id,
       }));
       set({ activeTrades: trades });
     } catch (_) {}
@@ -516,9 +451,8 @@ export const useStore = create((set, get) => ({
 
   _tradePoller: null,
   startTradePolling: () => {
-    const { _tradePoller, loadActiveTrades, fetchUserHistory } = get();
+    const { _tradePoller, loadActiveTrades } = get();
     if (_tradePoller) return;
-
     const poll = async () => {
       const prevTrades = [...get().activeTrades];
       await loadActiveTrades();
@@ -526,11 +460,8 @@ export const useStore = create((set, get) => ({
       const prevIds = new Set(prevTrades.map(t => t.id));
       const currIds = new Set(currTrades.map(t => t.id));
       const completed = [...prevIds].some(id => !currIds.has(id));
-      if (completed) {
-        setTimeout(() => { get().fetchUserHistory(); }, 3000);
-      }
+      if (completed) setTimeout(() => { get().fetchUserHistory(); }, 3000);
     };
-
     const id = setInterval(poll, 10000);
     set({ _tradePoller: id });
   },
@@ -540,25 +471,18 @@ export const useStore = create((set, get) => ({
     if (_tradePoller) { clearInterval(_tradePoller); set({ _tradePoller: null }); }
   },
 
-  // ─────────────────────────────────────────────────────────
-  // NOTIFICATIONS
-  // ─────────────────────────────────────────────────────────
   fetchNotifs: async () => {
     try {
       const res = await apiFetch("/user/notifications");
       if (!res.ok) return;
       const notifications = (await res.json()).data.notifications;
       const notifs = notifications.map(n => ({
-        id:    n._id,
-        title: n.title,
-        body:  n.message,
-        time:  timeAgo(new Date(n.createdAt)),
-        read:  n.isRead,
-        type:  n.type,
+        id:n._id, title:n.title, body:n.message,
+        time:timeAgo(new Date(n.createdAt)), read:n.isRead, type:n.type,
       }));
       set({ notifs });
       const hasNewBonus = notifications.some(n => n.type === 'referral' && !n.isRead);
-      if (hasNewBonus) { get().refreshBalances(); }
+      if (hasNewBonus) get().refreshBalances();
     } catch (_) {}
   },
 
@@ -569,31 +493,22 @@ export const useStore = create((set, get) => ({
       const { total, members } = (await res.json()).data;
       set(s => ({
         user: s.user ? {
-          ...s.user,
-          referralCount: total,
+          ...s.user, referralCount: total,
           referrals: members.map(m => ({
-            id:       m._id,
-            name:     m.fullName,
-            email:    m.email,
-            joined:   new Date(m.createdAt).toLocaleDateString(),
-            kycStatus:m.kycStatus,
-            tier:     m.tier || 'Bronze',
-            deposited:true,
-            earned:   5,
-            status:   'active',
+            id:m._id, name:m.fullName, email:m.email,
+            joined:new Date(m.createdAt).toLocaleDateString(),
+            kycStatus:m.kycStatus, tier:m.tier||'Bronze',
+            deposited:true, earned:5, status:'active',
           }))
         } : s.user
       }));
     } catch (_) {}
   },
 
-  // ─────────────────────────────────────────────────────────
-  // ADMIN
-  // ─────────────────────────────────────────────────────────
   generateSignal: async ({ coin, direction, tier, expiryMinutes }) => {
     const { addToast, addSignal } = get();
     try {
-      const res  = await apiFetch("/admin/signals/generate",{method:"POST",body:JSON.stringify({coin,direction,tier:tier||"All",expiryMinutes:expiryMinutes||15})});
+      const res = await apiFetch("/admin/signals/generate",{method:"POST",body:JSON.stringify({coin,direction,tier:tier||"All",expiryMinutes:expiryMinutes||15})});
       const data = await res.json();
       if (!res.ok) { addToast(data.message||"Failed","err"); return null; }
       const sig = data.data.signal;
@@ -650,12 +565,12 @@ export const useStore = create((set, get) => ({
 
   fetchAdminDeposits: async (status = "pending") => {
     try {
-      const qs  = status ? `?status=${status}` : "";
+      const qs = status ? `?status=${status}` : "";
       const res = await apiFetch(`/admin/deposits${qs}`);
       if (!res.ok) return [];
       return (await res.json()).data?.deposits?.map(d=>({
         id:d._id, user:d.userId?.fullName||"Unknown",
-        uid:d.userId ? "OCT"+String(d.userId._id||d.userId).slice(-6).toUpperCase() : "—",
+        uid:d.userId?"OCT"+String(d.userId._id||d.userId).slice(-6).toUpperCase():"—",
         tier:d.tier||"—", network:d.network||"—", hash:d.txId||"—",
         amount:d.amount, status:d.status, date:d.createdAt?.split("T")[0]||"",
       })) || [];
@@ -664,20 +579,15 @@ export const useStore = create((set, get) => ({
 
   fetchAdminWithdrawals: async (status = "pending") => {
     try {
-      const qs  = status ? `?status=${status}` : "";
+      const qs = status ? `?status=${status}` : "";
       const res = await apiFetch(`/admin/withdrawals${qs}`);
       if (!res.ok) return [];
       return (await res.json()).data?.withdrawals?.map(w=>({
-        id:        w._id,
-        user:      w.userId?.fullName || "Unknown",
-        uid:       w.userId ? "OCT"+String(w.userId._id||w.userId).slice(-6).toUpperCase() : "—",
-        amount:    w.amount,
-        fee:       w.fee || 0,
-        netAmount: w.netAmount || w.amount,
-        network:   w.network,
-        address:   w.walletAddress || "—",
-        status:    w.status,
-        date:      w.createdAt?.split("T")[0] || "",
+        id:w._id, user:w.userId?.fullName||"Unknown",
+        uid:w.userId?"OCT"+String(w.userId._id||w.userId).slice(-6).toUpperCase():"—",
+        amount:w.amount, fee:w.fee||0, netAmount:w.netAmount||w.amount,
+        network:w.network, address:w.walletAddress||"—",
+        status:w.status, date:w.createdAt?.split("T")[0]||"",
       })) || [];
     } catch (_) { return []; }
   },
@@ -687,25 +597,15 @@ export const useStore = create((set, get) => ({
       const res = await apiFetch("/admin/users");
       if (!res.ok) return [];
       return (await res.json()).data?.users?.map(u => ({
-        id:           u._id,
-        name:         u.fullName || u.email?.split("@")[0] || "—",
-        email:        u.email    || "—",
-        phone:        u.phone    || "",
-        joined:       u.createdAt?.split("T")[0] || "",
-        tier:         u.tier     || "No Tier",
-        fundBal:      u.fundingBalance  || 0,
-        tradeBal:     u.tradingBalance  || 0,
-        earnings:     u.totalProfit     || 0,
-        withdrawn:    0,
-        kycStatus:    u.kycStatus       || "none",
-        referralCount: u.teamCount      || 0,
-        referralCode:  u.referralCode   || "",
-        uid:          "OCT" + (u._id || "").slice(-6).toUpperCase(),
-        isHidden:     u.isHidden        || false,
-        referredBy:   u.referredBy
-          ? `${u.referredBy.fullName} (${u.referredBy.referralCode})`
-          : null,
-        referredById: u.referredBy?._id || null,
+        id:u._id, name:u.fullName||u.email?.split("@")[0]||"—",
+        email:u.email||"—", phone:u.phone||"",
+        joined:u.createdAt?.split("T")[0]||"", tier:u.tier||"No Tier",
+        fundBal:u.fundingBalance||0, tradeBal:u.tradingBalance||0,
+        earnings:u.totalProfit||0, withdrawn:0, kycStatus:u.kycStatus||"none",
+        referralCount:u.teamCount||0, referralCode:u.referralCode||"",
+        uid:"OCT"+(u._id||"").slice(-6).toUpperCase(), isHidden:u.isHidden||false,
+        referredBy:u.referredBy?`${u.referredBy.fullName} (${u.referredBy.referralCode})`:null,
+        referredById:u.referredBy?._id||null,
       })) || [];
     } catch (_) { return []; }
   },
@@ -722,15 +622,15 @@ export const useStore = create((set, get) => ({
     const { addToast } = get();
     try {
       const body = {};
-if (updates.name      !== undefined) body.fullName        = updates.name;
-if (updates.email     !== undefined) body.email           = updates.email;
-if (updates.phone     !== undefined) body.phone           = updates.phone;
-if (updates.fundBal   !== undefined) body.fundingBalance  = updates.fundBal;
-if (updates.tradeBal  !== undefined) body.tradingBalance  = updates.tradeBal;
-if (updates.earnings  !== undefined) body.totalProfit     = updates.earnings;
-if (updates.kycStatus !== undefined) body.kycStatus       = updates.kycStatus;
-if (updates.tier      !== undefined) body.tier            = updates.tier;
-      const res  = await apiFetch(`/admin/users/${userId}`,{method:"PUT",body:JSON.stringify(body)});
+      if (updates.name      !== undefined) body.fullName       = updates.name;
+      if (updates.email     !== undefined) body.email          = updates.email;
+      if (updates.phone     !== undefined) body.phone          = updates.phone;
+      if (updates.fundBal   !== undefined) body.fundingBalance = updates.fundBal;
+      if (updates.tradeBal  !== undefined) body.tradingBalance = updates.tradeBal;
+      if (updates.earnings  !== undefined) body.totalProfit    = updates.earnings;
+      if (updates.kycStatus !== undefined) body.kycStatus      = updates.kycStatus;
+      if (updates.tier      !== undefined) body.tier           = updates.tier;
+      const res = await apiFetch(`/admin/users/${userId}`,{method:"PUT",body:JSON.stringify(body)});
       const data = await res.json();
       if (res.ok) addToast("User updated ✅","ok"); else addToast(data.message||"Update failed","err");
       return res.ok;
@@ -760,10 +660,6 @@ if (updates.tier      !== undefined) body.tier            = updates.tier;
     addToast(`Wick applied to ${sym}`,"ok");
   },
 
-  // ─────────────────────────────────────────────────────────
-  // ✅ FIXED: fetchRealPrices — proxy through your own backend
-  // to avoid CoinGecko CORS errors in the browser console
-  // ─────────────────────────────────────────────────────────
   prices:buildPrices(),
   charts:buildCharts(),
   candles:(()=>{ const c={}; Object.keys(COINS).forEach(k=>{c[k]=buildCandles(k);}); return c; })(),
@@ -771,8 +667,6 @@ if (updates.tier      !== undefined) body.tier            = updates.tier;
 
   fetchRealPrices: async () => {
     try {
-      // ✅ Call your own backend /prices endpoint (avoids CORS block from CoinGecko)
-      // Make sure you add this route to your backend — see Railway Config guide below
       const r = await fetch(`${API}/prices`, { cache: "no-store" });
       if (!r.ok) return;
       const data = await r.json();
@@ -792,7 +686,7 @@ if (updates.tier      !== undefined) body.tier            = updates.tier;
           const elapsed=Date.now()-wick.startAt, half=wick.durationMs/2;
           if (elapsed<wick.durationMs) {
             if (elapsed<half) { const pct=elapsed/half; np[sym]=wick.startPrice+(wick.targetPrice-wick.startPrice)*pct; }
-            else              { const pct=(elapsed-half)/half; np[sym]=wick.targetPrice+(wick.startPrice-wick.targetPrice)*pct; }
+            else { const pct=(elapsed-half)/half; np[sym]=wick.targetPrice+(wick.startPrice-wick.targetPrice)*pct; }
           } else { np[sym]=wick.startPrice; nextWick=null; }
         } else {
           const drift=(Math.random()-.485)*.003;
@@ -814,9 +708,6 @@ if (updates.tier      !== undefined) body.tier            = updates.tier;
     });
   },
 
-  // ─────────────────────────────────────────────────────────
-  // SIGNALS / TRADES
-  // ─────────────────────────────────────────────────────────
   signals:{},
   addSignal:(code,data)=>set(s=>({signals:{...s.signals,[code]:data}})),
   activeTrades:[],
@@ -838,17 +729,11 @@ if (updates.tier      !== undefined) body.tier            = updates.tier;
     else addToast(`Closed ${pos.pair} ${pnl>=0?"+":""}$${pnl.toFixed(2)}`,"ok");
   },
 
-  // ─────────────────────────────────────────────────────────
-  // HISTORY
-  // ─────────────────────────────────────────────────────────
   orderHistory:[],
   addOrder:o=>set(s=>({orderHistory:[o,...s.orderHistory]})),
   txHistory:[],
   addTx:tx=>set(s=>({txHistory:[tx,...s.txHistory]})),
 
-  // ─────────────────────────────────────────────────────────
-  // NOTIFICATIONS / BANNERS / TOASTS
-  // ─────────────────────────────────────────────────────────
   notifs:[],
   markRead:id=>set(s=>({notifs:s.notifs.map(n=>n.id===id?{...n,read:true}:n)})),
   markAllRead:()=>set(s=>({notifs:s.notifs.map(n=>({...n,read:true}))})),

@@ -769,10 +769,10 @@ export default function AdminPanel({onExit, role}){
                   <div style={{marginBottom:w.status==="pending"?12:0}}>
   <div style={{fontFamily:"var(--m)",fontSize:18,fontWeight:900,color:"var(--dn)"}}>-${w.amount}</div>
   <div style={{fontSize:11,color:"var(--t3)",marginTop:3,lineHeight:1.7}}>
-    Platform fee: -${(w.amount*0.05).toFixed(2)} · Network fee: -${w.network==="ERC20"?"3.00":"2.00"}
+    Platform fee (5%): -${(w.amount*0.05).toFixed(2)}
   </div>
   <div style={{fontSize:12,fontWeight:700,color:"var(--up)",marginTop:2}}>
-    User receives: ${(w.amount - (w.amount*0.05) - (w.network==="ERC20"?3:2)).toFixed(2)}
+    User receives: ${(w.amount - w.amount*0.05).toFixed(2)}
   </div>
 </div>
                   {w.status==="pending"&&<div style={{display:"flex",gap:8}}><button className="btn btn-green btn-sm" style={{flex:1}} onClick={()=>appW(w.id)}>✓ Approve</button><button className="btn btn-red btn-sm" style={{flex:1}} onClick={()=>rejW(w.id)}>✕ Reject</button></div>}

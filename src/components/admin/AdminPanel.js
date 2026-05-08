@@ -163,25 +163,52 @@ function EditModal({ user, onSave, onClose }) {
   );
 }
 
-async function af(path, opts={}){
-  try{
+async function af(path, opts = {}) {
+  try {
     const token = useStore.getState()._token;
-    const h = {"Content-Type":"application/json",...(opts.headers||{})};
-    if(token) h["Authorization"]=`Bearer ${token}`;
-    const res = await fetch(`${API}${path}`,{...opts,headers:h,credentials:"include"});
-    if(res.status===401&&!opts._retry){
-      const rr = await fetch(`${API}/auth/refresh`,{method:"POST",credentials:"include"});
-      if(rr.ok){
+    const h = { "Content-Type": "application/json", ...(opts.headers || {}) };
+    if (token) h["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${API}${path}`, {
+      ...opts,
+      headers: h,
+      credentials: "include",
+    });
+
+    if (res.status === 401 && !opts._retry) {
+      const storedRefreshToken = typeof window !== "undefined"
+        ? localStorage.getItem("refreshToken")
+        : null;
+
+      const rr = await fetch(`${API}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: storedRefreshToken }),
+      });
+
+      if (rr.ok) {
         const rd = await rr.json();
-        const newToken = rd.data?.accessToken||rd.accessToken;
-        useStore.getState().setToken(newToken);
-        return af(path,{...opts,_retry:true});
+        const newAccess  = rd.data?.accessToken  || rd.accessToken;
+        const newRefresh = rd.data?.refreshToken || rd.refreshToken;
+        useStore.getState().setToken(newAccess);
+        if (newRefresh && typeof window !== "undefined") {
+          localStorage.setItem("refreshToken", newRefresh);
+        }
+        return af(path, { ...opts, _retry: true });
+      } else {
+        useStore.getState().setToken(null);
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+        }
       }
     }
-    const data = await res.json().catch(()=>({}));
-    return {ok:res.ok, data, status:res.status};
-  }catch(e){
-    return {ok:false, data:{message:"Network error"}, status:0};
+
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, data, status: res.status };
+  } catch (e) {
+    return { ok: false, data: { message: "Network error" }, status: 0 };
   }
 }
 

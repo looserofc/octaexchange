@@ -163,52 +163,25 @@ function EditModal({ user, onSave, onClose }) {
   );
 }
 
-async function af(path, opts = {}) {
-  try {
+async function af(path, opts={}){
+  try{
     const token = useStore.getState()._token;
-    const h = { "Content-Type": "application/json", ...(opts.headers || {}) };
-    if (token) h["Authorization"] = `Bearer ${token}`;
-
-    const res = await fetch(`${API}${path}`, {
-      ...opts,
-      headers: h,
-      credentials: "include",
-    });
-
-    if (res.status === 401 && !opts._retry) {
-      const storedRefreshToken = typeof window !== "undefined"
-        ? localStorage.getItem("refreshToken")
-        : null;
-
-      const rr = await fetch(`${API}/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: storedRefreshToken }),
-      });
-
-      if (rr.ok) {
+    const h = {"Content-Type":"application/json",...(opts.headers||{})};
+    if(token) h["Authorization"]=`Bearer ${token}`;
+    const res = await fetch(`${API}${path}`,{...opts,headers:h,credentials:"include"});
+    if(res.status===401&&!opts._retry){
+      const rr = await fetch(`${API}/auth/refresh`,{method:"POST",credentials:"include"});
+      if(rr.ok){
         const rd = await rr.json();
-        const newAccess  = rd.data?.accessToken  || rd.accessToken;
-        const newRefresh = rd.data?.refreshToken || rd.refreshToken;
-        useStore.getState().setToken(newAccess);
-        if (newRefresh && typeof window !== "undefined") {
-          localStorage.setItem("refreshToken", newRefresh);
-        }
-        return af(path, { ...opts, _retry: true });
-      } else {
-        useStore.getState().setToken(null);
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
-        }
+        const newToken = rd.data?.accessToken||rd.accessToken;
+        useStore.getState().setToken(newToken);
+        return af(path,{...opts,_retry:true});
       }
     }
-
-    const data = await res.json().catch(() => ({}));
-    return { ok: res.ok, data, status: res.status };
-  } catch (e) {
-    return { ok: false, data: { message: "Network error" }, status: 0 };
+    const data = await res.json().catch(()=>({}));
+    return {ok:res.ok, data, status:res.status};
+  }catch(e){
+    return {ok:false, data:{message:"Network error"}, status:0};
   }
 }
 
@@ -796,10 +769,10 @@ export default function AdminPanel({onExit, role}){
                   <div style={{marginBottom:w.status==="pending"?12:0}}>
   <div style={{fontFamily:"var(--m)",fontSize:18,fontWeight:900,color:"var(--dn)"}}>-${w.amount}</div>
   <div style={{fontSize:11,color:"var(--t3)",marginTop:3,lineHeight:1.7}}>
-    Platform fee (5%): -${(w.amount*0.05).toFixed(2)}
+    Platform fee: -${(w.amount*0.05).toFixed(2)} · Network fee: -${w.network==="ERC20"?"3.00":"2.00"}
   </div>
   <div style={{fontSize:12,fontWeight:700,color:"var(--up)",marginTop:2}}>
-    User receives: ${(w.amount - w.amount*0.05).toFixed(2)}
+    User receives: ${(w.amount - (w.amount*0.05) - (w.network==="ERC20"?3:2)).toFixed(2)}
   </div>
 </div>
                   {w.status==="pending"&&<div style={{display:"flex",gap:8}}><button className="btn btn-green btn-sm" style={{flex:1}} onClick={()=>appW(w.id)}>✓ Approve</button><button className="btn btn-red btn-sm" style={{flex:1}} onClick={()=>rejW(w.id)}>✕ Reject</button></div>}

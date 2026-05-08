@@ -109,10 +109,10 @@ export default function AssetsPage() {
 
   // ── Withdrawal preview ─────────────────────────────────
   const wdAmt        = parseFloat(wAmt) || 0;
-  // const wdNetworkFee = wdNet ? wdNet.fee : 0;
+  const wdNetworkFee = wdNet ? wdNet.fee : 0;
   const wdPlatformFee= parseFloat((wdAmt * FUND_WD_FEE).toFixed(2));
-  const wdTotalFee   = wdPlatformFee;
-  const wdReceive = parseFloat((wdAmt - wdPlatformFee).toFixed(2));
+  const wdTotalFee   = wdPlatformFee + wdNetworkFee;
+  const wdReceive    = parseFloat((wdAmt - wdTotalFee).toFixed(2));
 
   const copy = addr => {
     navigator.clipboard?.writeText(addr);
@@ -401,8 +401,7 @@ export default function AssetsPage() {
             <div>
               <div style={{ background:"rgba(240,165,0,.06)", border:"1px solid rgba(240,165,0,.15)", borderRadius:12, padding:"12px 14px", marginBottom:16, fontSize:13, color:"var(--t2)", lineHeight:1.7 }}>
                 ⚠️ Withdrawals from <strong style={{ color:"var(--blue)" }}>Funding Account</strong> only.<br/>
-                
-<strong style={{ color:"var(--dn)" }}>5% platform fee</strong> · Min: ${MIN_WD} · Within 24h.
+                <strong style={{ color:"var(--dn)" }}>5% platform fee + network fee</strong> · Min: ${MIN_WD} · Within 24h.
               </div>
               <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:12, padding:"12px 14px", marginBottom:16, display:"flex", justifyContent:"space-between" }}>
                 <div>
@@ -423,7 +422,7 @@ export default function AssetsPage() {
                 <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:12, padding:"12px 14px", marginBottom:12, fontSize:12, color:"var(--t2)", lineHeight:1.9 }}>
                   <div style={{ display:"flex", justifyContent:"space-between" }}><span>Amount</span><span style={{color:"var(--t1)",fontWeight:700}}>${wdAmt.toFixed(2)}</span></div>
                   <div style={{ display:"flex", justifyContent:"space-between" }}><span>Platform Fee (5%)</span><span style={{color:"var(--dn)"}}>-${wdPlatformFee.toFixed(2)}</span></div>
-                  {/* <div style={{ display:"flex", justifyContent:"space-between" }}><span>Network Fee ({wdNet?.feeLabel})</span><span style={{color:"var(--dn)"}}>-${wdNetworkFee.toFixed(2)}</span></div> */}
+                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Network Fee ({wdNet?.feeLabel})</span><span style={{color:"var(--dn)"}}>-${wdNetworkFee.toFixed(2)}</span></div>
                   <div style={{ display:"flex", justifyContent:"space-between", borderTop:"1px solid var(--ln)", paddingTop:6, marginTop:4 }}>
                     <span style={{fontWeight:700}}>You Receive</span>
                     <span style={{color:"var(--up)",fontWeight:900,fontFamily:"var(--m)"}}>${Math.max(0, wdReceive).toFixed(2)}</span>

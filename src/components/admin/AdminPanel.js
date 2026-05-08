@@ -749,37 +749,37 @@ export default function AdminPanel({onExit, role}){
           )}
 
           {/* WITHDRAWALS */}
-          const WithdrawalCard = ({ w, appW, rejW }) => (
-  <div key={w.id} className="card" style={{padding:14,marginBottom:10}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-      <div>
-        <div style={{fontWeight:700,fontSize:14}}>{w.user}</div>
-        <div style={{fontSize:12,color:"var(--t2)",marginTop:2}}>{w.network}</div>
-        {w.date&&<div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>{w.date}</div>}
-      </div>
-      {/* SB is your status badge component */}
-    </div>
-    <div style={{background:"var(--ink2)",borderRadius:8,padding:"8px 10px",marginBottom:10}}>
-      <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:2}}>WALLET ADDRESS</div>
-      <div style={{fontSize:11,fontFamily:"var(--m)",color:"var(--blue)",wordBreak:"break-all"}}>{w.address}</div>
-    </div>
-    <div style={{marginBottom:w.status==="pending"?12:0}}>
-      <div style={{fontFamily:"var(--m)",fontSize:18,fontWeight:900,color:"var(--dn)"}}>-${w.amount}</div>
-      <div style={{fontSize:11,color:"var(--t3)",marginTop:3,lineHeight:1.7}}>
-        Platform fee (5%): -${(w.amount*0.05).toFixed(2)}
-      </div>
-      <div style={{fontSize:12,fontWeight:700,color:"var(--up)",marginTop:2}}>
-        User receives: ${(w.amount - (w.amount*0.05)).toFixed(2)}
-      </div>
-    </div>
-    {w.status==="pending"&&(
-      <div style={{display:"flex",gap:8}}>
-        <button className="btn btn-green btn-sm" style={{flex:1}} onClick={()=>appW(w.id)}>✓ Approve</button>
-        <button className="btn btn-red btn-sm" style={{flex:1}} onClick={()=>rejW(w.id)}>✕ Reject</button>
-      </div>
-    )}
+          {sec==="wds"&&(
+            <div>
+              {isMain&&<FilterRow value={wdF} onChange={setWdF} onRefresh={refresh} opts={[["pending","⏳ Pending"],["all","📋 All History"]]}/>}
+              {!isMain&&<div style={{marginBottom:14,display:"flex",justifyContent:"flex-end"}}><button onClick={refresh} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--ln)",background:"var(--ink3)",color:"var(--t3)",fontSize:11,cursor:"pointer"}}>🔄 Refresh</button></div>}
+              <SearchBar onSearch={setWQ} placeholder="Search user, wallet address..."/>
+              {loading&&<div style={{textAlign:"center",padding:20,color:"var(--t3)"}}>Loading withdrawals...</div>}
+              {!loading&&fw.length===0&&<div className="empty"><div className="ei">⬆️</div><p style={{fontSize:13}}>No withdrawals found</p></div>}
+              {fw.map(w=>(
+                <div key={w.id} className="card" style={{padding:14,marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                    <div><div style={{fontWeight:700,fontSize:14}}>{w.user}</div><div style={{fontSize:12,color:"var(--t2)",marginTop:2}}>{w.network}</div>{w.date&&<div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>{w.date}</div>}</div>
+                    <SB s={w.status}/>
+                  </div>
+                  <div style={{background:"var(--ink2)",borderRadius:8,padding:"8px 10px",marginBottom:10}}>
+                    <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:2}}>WALLET ADDRESS</div>
+                    <div style={{fontSize:11,fontFamily:"var(--m)",color:"var(--blue)",wordBreak:"break-all"}}>{w.address}</div>
+                  </div>
+                  <div style={{marginBottom:w.status==="pending"?12:0}}>
+  <div style={{fontFamily:"var(--m)",fontSize:18,fontWeight:900,color:"var(--dn)"}}>-${w.amount}</div>
+  <div style={{fontSize:11,color:"var(--t3)",marginTop:3,lineHeight:1.7}}>
+    Platform fee (5%): -${(w.amount*0.05).toFixed(2)}
   </div>
-);
+  <div style={{fontSize:12,fontWeight:700,color:"var(--up)",marginTop:2}}>
+    User receives: ${(w.amount - (w.amount*0.05)).toFixed(2)}
+  </div>
+</div>
+                  {w.status==="pending"&&<div style={{display:"flex",gap:8}}><button className="btn btn-green btn-sm" style={{flex:1}} onClick={()=>appW(w.id)}>✓ Approve</button><button className="btn btn-red btn-sm" style={{flex:1}} onClick={()=>rejW(w.id)}>✕ Reject</button></div>}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* KYC */}
           {sec==="kyc"&&(

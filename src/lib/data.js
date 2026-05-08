@@ -1,7 +1,7 @@
-export const FUND_WD_FEE   = 0.05;
+export const FUND_WD_FEE   = 0.05;  // 5% platform fee only — no network fee
 export const TRADE_OUT_FEE = 0.25;
 export const FREEZE_MS     = 0;
-export const MIN_WD        = 11;
+export const MIN_WD        = 10;
 
 // ── 10 Tiers ─────────────────────────────────────────────
 export const TIERS = [
@@ -30,11 +30,13 @@ export const COINS = {
   MATIC:{sym:"MATIC",name:"Polygon",   price:0.8938,  change: 4.33,vol:"0.6B", mktcap:"8B",   color:"#8247E5"},
 };
 
-// ── Networks — updated fees: TRC20=$2, BEP20=$2, ERC20=$3 ─
+// ── Networks — updated deposit fees: TRC20=$1, BEP20=$0.01, ERC20=$0.6
+// Note: network fee here is ONLY added to the deposit total the user must send.
+// Withdrawals have NO network fee — only 5% platform fee (FUND_WD_FEE above).
 export const NETWORKS = [
-  {id:"trc20", name:"TRC20 (USDT)", fee:2, feeLabel:"$2",  min:10,  address:"TA3JYRziYUNCFbfVkmVXK1atU3fBD5j1oK"},
-  {id:"erc20", name:"ERC20 (USDT)", fee:3, feeLabel:"$3",  min:50,  address:"0xF598f9d8B16079Bd88c1229696118b8e32697D5f"},
-  {id:"bep20", name:"BEP20 (USDT)", fee:2, feeLabel:"$2",  min:10,  address:"0xF598f9d8B16079Bd88c1229696118b8e32697D5f"},
+  {id:"trc20", name:"TRC20 (USDT)", fee:1,    feeLabel:"$1",     min:10,  address:"TA3JYRziYUNCFbfVkmVXK1atU3fBD5j1oK"},
+  {id:"erc20", name:"ERC20 (USDT)", fee:0.6,  feeLabel:"$0.60",  min:50,  address:"0xF598f9d8B16079Bd88c1229696118b8e32697D5f"},
+  {id:"bep20", name:"BEP20 (USDT)", fee:0.01, feeLabel:"$0.01",  min:10,  address:"0xF598f9d8B16079Bd88c1229696118b8e32697D5f"},
 ];
 
 export const PAIRS     = ["BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT"];

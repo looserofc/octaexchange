@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { TIERS, NETWORKS, FUND_WD_FEE, TRADE_OUT_FEE, MIN_WD } from "@/lib/data";
 
@@ -64,7 +64,6 @@ export default function AssetsPage() {
       setDStep(1);
       setAssetsTab("overview");
     }
-    // Fetch pending volume on mount/user change
     if (user) {
       fetchPendingVolume();
     }
@@ -92,27 +91,27 @@ export default function AssetsPage() {
   const depNet   = NETWORKS.find(n => n.id === dNet);
   const wdNet    = NETWORKS.find(n => n.id === wNet);
 
-  // ── Total amount user must send = tier price + network fee ──
+  // Total amount user must send = tier price + network fee (deposit only)
   const totalDepositAmount = dTier && depNet ? dTier.price + depNet.fee : null;
 
-  // ── Network dropdown options ───────────────────────────
-  const netOpts   = NETWORKS.map(n => ({
+  // Network dropdown options for deposit
+  const netOpts = NETWORKS.map(n => ({
     id:  n.id,
     name: n.name,
-    sub: `Network Fee: ${n.feeLabel} · You send: $${dTier ? dTier.price + n.fee : n.min + n.fee}`,
+    sub: `Network Fee: ${n.feeLabel} · You send: $${dTier ? (dTier.price + n.fee).toFixed(2) : (n.min + n.fee).toFixed(2)}`,
   }));
+
+  // Network dropdown for withdrawal — no network fee shown
   const wdNetOpts = NETWORKS.map(n => ({
     id:  n.id,
     name: n.name,
-    sub: `Network Fee: ${n.feeLabel} · Min: $${MIN_WD}`,
+    sub: `Min: $${MIN_WD} · 5% platform fee only`,
   }));
 
-  // ── Withdrawal preview ─────────────────────────────────
+  // Withdrawal preview — platform fee only, no network fee
   const wdAmt        = parseFloat(wAmt) || 0;
-  const wdNetworkFee = wdNet ? wdNet.fee : 0;
   const wdPlatformFee= parseFloat((wdAmt * FUND_WD_FEE).toFixed(2));
-  const wdTotalFee   = wdPlatformFee + wdNetworkFee;
-  const wdReceive    = parseFloat((wdAmt - wdTotalFee).toFixed(2));
+  const wdReceive    = parseFloat((wdAmt - wdPlatformFee).toFixed(2));
 
   const copy = addr => {
     navigator.clipboard?.writeText(addr);
@@ -121,7 +120,6 @@ export default function AssetsPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // ── Deposit submit ─────────────────────────────────────
   const handleDeposit = async () => {
     if (!dHash.trim()) { setHashErr("Transaction hash is required"); return; }
     setBusy(true);
@@ -138,7 +136,6 @@ export default function AssetsPage() {
     }
   };
 
-  // ── Withdrawal submit ──────────────────────────────────
   const handleWithdraw = async () => {
     const errs = {}, amt = parseFloat(wAmt);
     if (!wNet)                 errs.net  = "Select a network";
@@ -152,7 +149,6 @@ export default function AssetsPage() {
     if (result.success) { setWAmt(""); setWAddr(""); setWErrs({}); }
   };
 
-  // ── Transfer submit ────────────────────────────────────
   const handleTransfer = async () => {
     const amt = parseFloat(trAmt);
     if (!amt || amt <= 0) { addToast("Enter transfer amount", "err"); return; }
@@ -213,46 +209,31 @@ export default function AssetsPage() {
         </div>
       </div>
 
-      {/* ── PENDING VOLUME INDICATOR ── */}
+      {/* Pending volume indicator */}
       {pendingVolume.requirement > 0 && (
         <div style={{ padding:"10px 16px 0" }}>
-          <div style={{ 
-            background: pendingVolume.completed 
-              ? "rgba(0,200,150,.08)" 
-              : "rgba(240,165,0,.08)",
-            border: pendingVolume.completed 
-              ? "1px solid rgba(0,200,150,.2)" 
-              : "1px solid rgba(240,165,0,.2)",
-            borderRadius: 12,
-            padding: "12px 16px",
-            marginBottom: 10,
+          <div style={{
+            background: pendingVolume.completed ? "rgba(0,200,150,.08)" : "rgba(240,165,0,.08)",
+            border: pendingVolume.completed ? "1px solid rgba(0,200,150,.2)" : "1px solid rgba(240,165,0,.2)",
+            borderRadius: 12, padding: "12px 16px", marginBottom: 10,
           }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-              <span style={{ fontSize:20 }}>
-                {pendingVolume.completed ? "✅" : "⏳"}
-              </span>
+              <span style={{ fontSize:20 }}>{pendingVolume.completed ? "✅" : "⏳"}</span>
               <div style={{ flex:1 }}>
                 <div style={{ fontWeight:700, fontSize:13, color:pendingVolume.completed?"var(--up)":"var(--gold)" }}>
                   {pendingVolume.completed ? "Pending Volume Completed!" : "Pending Volume Required"}
                 </div>
                 <div style={{ fontSize:11, color:"var(--t2)", marginTop:2 }}>
                   {pendingVolume.completed
-                    ? `You can now transfer with 0% fees`
+                    ? "You can now transfer with 0% fees"
                     : `$${pendingVolume.remaining.toFixed(2)} remaining`}
                 </div>
               </div>
             </div>
-            
-            {/* Progress bar */}
             {!pendingVolume.completed && (
               <div style={{ marginBottom:8 }}>
                 <div style={{ background:"rgba(255,255,255,.1)", borderRadius:6, height:8, overflow:"hidden" }}>
-                  <div style={{
-                    background:"linear-gradient(90deg, var(--gold), #c07800)",
-                    height:"100%",
-                    width:`${pendingVolume.progress}%`,
-                    transition:"width .3s"
-                  }}/>
+                  <div style={{ background:"linear-gradient(90deg, var(--gold), #c07800)", height:"100%", width:`${pendingVolume.progress}%`, transition:"width .3s" }}/>
                 </div>
                 <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"var(--t3)", marginTop:4, fontFamily:"var(--m)" }}>
                   <span>${pendingVolume.current.toFixed(2)}</span>
@@ -261,12 +242,10 @@ export default function AssetsPage() {
                 </div>
               </div>
             )}
-
-            {/* Info text */}
             <div style={{ fontSize:11, color:"var(--t2)", lineHeight:1.6 }}>
               {pendingVolume.completed
                 ? "You have reached your profit target! All transfers will have 0% fees."
-                : `You need to reach $${pendingVolume.requirement.toFixed(2)} in your trading account before you can transfer without fees. Once you reach this target, you'll be able to transfer with 0% fee.`}
+                : `You need to reach $${pendingVolume.requirement.toFixed(2)} in your trading account before you can transfer without fees.`}
             </div>
           </div>
         </div>
@@ -357,14 +336,14 @@ export default function AssetsPage() {
               <div>
                 <div style={{ marginBottom:14 }}>
                   <div style={{ fontSize:11, color:"var(--t2)", fontWeight:700, letterSpacing:".8px", textTransform:"uppercase", marginBottom:8 }}>
-                    Send ${totalDepositAmount} USDT to:
+                    Send ${totalDepositAmount?.toFixed(2)} USDT to:
                   </div>
                   <div style={{ background:"rgba(240,165,0,.06)", border:"1px solid rgba(240,165,0,.15)", borderRadius:10, padding:"10px 14px", marginBottom:10, fontSize:12, color:"var(--t2)", lineHeight:1.8 }}>
                     💰 Tier Price: <strong style={{color:"var(--t1)"}}>${dTier.price}</strong>
                     {" + "}
                     Network Fee: <strong style={{color:"var(--t1)"}}>{depNet.feeLabel}</strong>
                     {" = "}
-                    <strong style={{color:"var(--gold)"}}>Total: ${totalDepositAmount}</strong>
+                    <strong style={{color:"var(--gold)"}}>Total: ${totalDepositAmount?.toFixed(2)}</strong>
                   </div>
                   <div style={{ background:"var(--ink2)", border:"1px solid var(--ln2)", borderRadius:12, padding:"14px 16px", marginBottom:8 }}>
                     <div style={{ fontFamily:"var(--m)", fontSize:12, wordBreak:"break-all", color:"var(--t1)", lineHeight:1.7 }}>{depNet.address}</div>
@@ -401,7 +380,7 @@ export default function AssetsPage() {
             <div>
               <div style={{ background:"rgba(240,165,0,.06)", border:"1px solid rgba(240,165,0,.15)", borderRadius:12, padding:"12px 14px", marginBottom:16, fontSize:13, color:"var(--t2)", lineHeight:1.7 }}>
                 ⚠️ Withdrawals from <strong style={{ color:"var(--blue)" }}>Funding Account</strong> only.<br/>
-                <strong style={{ color:"var(--dn)" }}>5% platform fee + network fee</strong> · Min: ${MIN_WD} · Within 24h.
+                <strong style={{ color:"var(--dn)" }}>5% platform fee</strong> · Min: ${MIN_WD} · Processed within 24h.
               </div>
               <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:12, padding:"12px 14px", marginBottom:16, display:"flex", justifyContent:"space-between" }}>
                 <div>
@@ -418,17 +397,19 @@ export default function AssetsPage() {
                 </div>
                 {wErrs.amt && <div style={{ fontSize:11, color:"var(--dn)", marginTop:5 }}>{wErrs.amt}</div>}
               </div>
+
+              {/* Withdrawal fee breakdown — platform fee only */}
               {wdAmt > 0 && wNet && (
                 <div style={{ background:"var(--ink3)", border:"1px solid var(--ln)", borderRadius:12, padding:"12px 14px", marginBottom:12, fontSize:12, color:"var(--t2)", lineHeight:1.9 }}>
                   <div style={{ display:"flex", justifyContent:"space-between" }}><span>Amount</span><span style={{color:"var(--t1)",fontWeight:700}}>${wdAmt.toFixed(2)}</span></div>
                   <div style={{ display:"flex", justifyContent:"space-between" }}><span>Platform Fee (5%)</span><span style={{color:"var(--dn)"}}>-${wdPlatformFee.toFixed(2)}</span></div>
-                  <div style={{ display:"flex", justifyContent:"space-between" }}><span>Network Fee ({wdNet?.feeLabel})</span><span style={{color:"var(--dn)"}}>-${wdNetworkFee.toFixed(2)}</span></div>
                   <div style={{ display:"flex", justifyContent:"space-between", borderTop:"1px solid var(--ln)", paddingTop:6, marginTop:4 }}>
                     <span style={{fontWeight:700}}>You Receive</span>
                     <span style={{color:"var(--up)",fontWeight:900,fontFamily:"var(--m)"}}>${Math.max(0, wdReceive).toFixed(2)}</span>
                   </div>
                 </div>
               )}
+
               <div className="fg">
                 <label className="lbl">Wallet Address <span style={{ color:"var(--dn)" }}>*</span></label>
                 <input className="inp" placeholder={`Enter ${wdNet?.name??"wallet"} address`} value={wAddr} onChange={e => { setWAddr(e.target.value); setWErrs(p=>({...p,addr:undefined})); }} style={{ borderColor:wErrs.addr?"var(--dn)":"" }}/>
@@ -465,7 +446,6 @@ export default function AssetsPage() {
                 </div>
               </div>
             </div>
-            {/* Fee note - UPDATED with pending volume logic */}
             <div style={{ fontSize:11, color:"var(--t3)", textAlign:"center", marginBottom:12 }}>
               {trDir==="to_trading"
                 ? "✅ No fee — full amount transferred"

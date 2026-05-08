@@ -372,21 +372,25 @@ export const useStore = create((set, get) => ({
     } catch (_) { addToast("Network error","err"); return {success:false}; }
   },
 
-  submitWithdrawal: async ({ amount, network, walletAddress }) => {
-    const { addToast, addTx, user, setUser } = get();
-    try {
-      const netMap = {trc20:"TRC20",erc20:"ERC20",bep20:"BEP20"};
-      const res = await apiFetch("/withdraw/submit",{method:"POST",body:JSON.stringify({amount, network:netMap[network]||network.toUpperCase(), walletAddress})});
-      const data = await res.json();
-      if (!res.ok) { addToast(data.message||"Withdrawal failed","err"); return {success:false, message:data.message}; }
-      const newFundBal = data.data?.fundingBalance ?? (user.fundingBalance - amount);
-      const fee = parseFloat((amount*FUND_WD_FEE).toFixed(2));
-      setUser({...user, fundingBalance:newFundBal});
-      addTx({ id:"tx"+Date.now(), type:"withdrawal", label:"Withdrawal", wallet:"funding", amount, fee, net:amount-fee, network:network.toUpperCase(), status:"pending", date:new Date().toLocaleDateString(), address:walletAddress });
-      addToast("Withdrawal submitted","info");
-      return {success:true};
-    } catch (_) { addToast("Network error","err"); return {success:false}; }
-  },
+  // PATCH — only the submitWithdrawal function in store.js needs updating.
+// Replace the existing submitWithdrawal in your store with this:
+
+submitWithdrawal: async ({ amount, network, walletAddress }) => {
+  const { addToast, addTx, user, setUser } = get();
+  try {
+    const netMap = {trc20:"TRC20",erc20:"ERC20",bep20:"BEP20"};
+    const res = await apiFetch("/withdraw/submit",{method:"POST",body:JSON.stringify({amount, network:netMap[network]||network.toUpperCase(), walletAddress})});
+    const data = await res.json();
+    if (!res.ok) { addToast(data.message||"Withdrawal failed","err"); return {success:false, message:data.message}; }
+    const newFundBal = data.data?.fundingBalance ?? (user.fundingBalance - amount);
+    // Platform fee only (5%) — no network fee
+    const fee = parseFloat((amount * FUND_WD_FEE).toFixed(2));
+    setUser({...user, fundingBalance:newFundBal});
+    addTx({ id:"tx"+Date.now(), type:"withdrawal", label:"Withdrawal", wallet:"funding", amount, fee, net:amount-fee, network:network.toUpperCase(), status:"pending", date:new Date().toLocaleDateString(), address:walletAddress });
+    addToast("Withdrawal submitted","info");
+    return {success:true};
+  } catch (_) { addToast("Network error","err"); return {success:false}; }
+},
 
   transferToTrading: async (amount) => {
     const { addToast, addTx, user, setUser, fetchPendingVolume } = get();

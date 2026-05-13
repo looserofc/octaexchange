@@ -574,7 +574,7 @@ export default function AdminPanel({onExit, role}){
                     </div>
                   </div>
 
-                  {isMain&&(
+                  {(
                     <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
                       {[["Funding","$"+(u.fundBal??0).toFixed(0),"var(--blue)"],["Trading","$"+(u.tradeBal??0).toFixed(0),"var(--up)"],["Earned","$"+(u.earnings??0).toFixed(0),"var(--gold)"],["Withdrawn","$"+(u.withdrawn??0).toFixed(0),"var(--dn)"]].map(([l,v,c])=>(
                         <div key={l} style={{background:"var(--ink2)",borderRadius:8,padding:"8px 10px"}}>

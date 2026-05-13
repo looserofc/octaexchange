@@ -44,15 +44,14 @@ export const LEVERAGES = [1,2,3,5,10,20,50,100];
 export const BANNERS_INIT = [{id:"b1",title:"🎉 Welcome to OctaExchange",text:"Start your trading journey with us today",color:"#f0a500",active:true}];
 
 export const REF_LEVELS = [
-  {level:0, label:"LV 0",  min:0,    max:0,      color:"#435070"},
-  {level:1, label:"LV 1",  min:1,    max:5,      color:"#8a97b8"},
-  {level:2, label:"LV 2",  min:6,    max:30,     color:"#4d9fff"},
-  {level:3, label:"LV 3",  min:31,   max:120,    color:"#00d4ff"},
-  {level:4, label:"LV 4",  min:121,  max:500,    color:"#00e676"},
-  {level:5, label:"LV 5",  min:501,  max:1500,   color:"#00f5c8"},
-  {level:6, label:"LV 6",  min:1501, max:3000,   color:"#9b59ff"},
-  {level:7, label:"LV 7",  min:3001, max:5000,   color:"#e056fd"},
-  {level:10,label:"LV 10", min:5001, max:999999, color:"#f0a500"},
+  {level:0, label:"LV 0", min:0,    max:4,      color:"#435070"},
+  {level:1, label:"LV 1", min:5,    max:29,     color:"#8a97b8"},
+  {level:2, label:"LV 2", min:30,   max:99,     color:"#4d9fff"},
+  {level:3, label:"LV 3", min:100,  max:499,    color:"#00d4ff"},
+  {level:4, label:"LV 4", min:500,  max:999,    color:"#00e676"},
+  {level:5, label:"LV 5", min:1000, max:1999,   color:"#00f5c8"},
+  {level:6, label:"LV 6", min:2000, max:4999,   color:"#9b59ff"},
+  {level:7, label:"LV 7", min:5000, max:999999, color:"#f0a500"},
 ];
 
 export function getRefLevel(count=0){

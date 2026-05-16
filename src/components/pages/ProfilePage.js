@@ -199,7 +199,7 @@ function TwoFAScreen({ onBack }) {
 }
 
 function SupportScreen({ onBack }) {
-  const TELEGRAM_LINK = "https://t.me/OctaTrade_Support";
+  const TELEGRAM_LINK = "https://t.me/Octa_Assistant1";
   return (
     <div>
       <BackHdr onBack={onBack} title="Customer Service"/>

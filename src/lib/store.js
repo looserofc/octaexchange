@@ -92,6 +92,19 @@ function buildCandles(sym) {
 }
 function buildPrices() { const p = {}; Object.keys(COINS).forEach(k => { p[k] = COINS[k].price; }); return p; }
 
+function fmtDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-GB", {
+    day:   "2-digit",
+    month: "short",
+    year:  "numeric",
+    hour:  "2-digit",
+    minute:"2-digit",
+    hour12: true,
+  });
+}
+
 function mapApiUser(u) {
   const uid = "OCT" + (u._id || u.id || "").slice(-6).toUpperCase();
   return {
@@ -111,7 +124,7 @@ function mapApiUser(u) {
     referralCount: u.teamCount||0,
     referrals: [],
     referredBy: u.referredBy||null,
-    joinDate: u.createdAt?.split("T")[0]||"",
+    joinDate: fmtDateTime(u.createdAt),
     role: u.role||"user",
   };
 }
@@ -138,7 +151,7 @@ function mapTx(t) {
     id: t._id, type: displayType, label: labelMap[displayType] || t.type,
     wallet: t.toWallet || t.fromWallet || "funding", amount: t.amount,
     fee: t.fee || 0, net: t.netAmount || t.amount, network: t.network || "",
-    status: t.status, date: t.createdAt?.split("T")[0] || new Date().toLocaleDateString(),
+    status: t.status, date: fmtDateTime(t.createdAt),
     hash: t.txId || "", address: t.walletAddress || "", coin: t.coin || "", note: t.note || "",
   };
 }
@@ -584,7 +597,7 @@ submitWithdrawal: async ({ amount, network, walletAddress }) => {
         id:d._id, user:d.userId?.fullName||"Unknown",
         uid:d.userId?"OCT"+String(d.userId._id||d.userId).slice(-6).toUpperCase():"—",
         tier:d.tier||"—", network:d.network||"—", hash:d.txId||"—",
-        amount:d.amount, status:d.status, date:d.createdAt?.split("T")[0]||"",
+        amount:d.amount, status:d.status, date: fmtDateTime(d.createdAt),
       })) || [];
     } catch (_) { return []; }
   },
@@ -599,7 +612,7 @@ submitWithdrawal: async ({ amount, network, walletAddress }) => {
         uid:w.userId?"OCT"+String(w.userId._id||w.userId).slice(-6).toUpperCase():"—",
         amount:w.amount, fee:w.fee||0, netAmount:w.netAmount||w.amount,
         network:w.network, address:w.walletAddress||"—",
-        status:w.status, date:w.createdAt?.split("T")[0]||"",
+        status:w.status, date: fmtDateTime(w.createdAt),
       })) || [];
     } catch (_) { return []; }
   },
@@ -611,7 +624,8 @@ submitWithdrawal: async ({ amount, network, walletAddress }) => {
       return (await res.json()).data?.users?.map(u => ({
         id:u._id, name:u.fullName||u.email?.split("@")[0]||"—",
         email:u.email||"—", phone:u.phone||"",
-        joined:u.createdAt?.split("T")[0]||"", tier:u.tier||"No Tier",
+        joined: fmtDateTime(u.createdAt),
+        tier:u.tier||"No Tier",
         fundBal:u.fundingBalance||0, tradeBal:u.tradingBalance||0,
         earnings:u.totalProfit||0, withdrawn:0, kycStatus:u.kycStatus||"none",
         referralCount: u.qualifiedReferralCount ?? 0,
@@ -626,6 +640,14 @@ submitWithdrawal: async ({ amount, network, walletAddress }) => {
   fetchAdminDashboard: async () => {
     try {
       const res = await apiFetch('/admin/dashboard');
+      if (!res.ok) return null;
+      return (await res.json()).data || null;
+    } catch (_) { return null; }
+  },
+
+  fetchAdminUserTeam: async (userId) => {
+    try {
+      const res = await apiFetch(`/admin/users/${userId}/team`);
       if (!res.ok) return null;
       return (await res.json()).data || null;
     } catch (_) { return null; }

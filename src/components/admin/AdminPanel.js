@@ -2,11 +2,24 @@ import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { PAIRS, COINS, getRefLevel, TIERS } from "@/lib/data";
 
+function fmtDateTime(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day:   "2-digit",
+    month: "short",
+    year:  "numeric",
+    hour:  "2-digit",
+    minute:"2-digit",
+    hour12: true,
+  });
+}
+
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 const MENU_MAIN = [
   {id:"dash",   icon:"📊", label:"Dashboard"},
   {id:"users",  icon:"👥", label:"Users"},
+  {id:"team",   icon:"🌐", label:"My Team"},
   {id:"codes",  icon:"🔑", label:"Signals"},
   {id:"price",  icon:"📈", label:"Price Control"},
   {id:"deps",   icon:"⬇",  label:"Deposits"},
@@ -18,6 +31,7 @@ const MENU_MAIN = [
 const MENU_SUB = [
   {id:"dash",  icon:"📊", label:"Dashboard"},
   {id:"users", icon:"👥", label:"Users"},
+  {id:"team",  icon:"🌐", label:"My Team"},
   {id:"codes", icon:"🔑", label:"Signals"},
   {id:"deps",  icon:"⬇",  label:"Deposits"},
   {id:"wds",   icon:"⬆",  label:"Withdrawals"},
@@ -40,8 +54,6 @@ function SearchBar({onSearch, placeholder}){
   );
 }
 
-// ── MUST be outside AdminPanel and EditModal ──────────────
-// Defining inside causes remount on every keystroke (focus loss bug)
 function ModalField({ label, value, onChange, type="text" }) {
   return (
     <div className="fg">
@@ -107,7 +119,6 @@ function EditModal({ user, onSave, onClose }) {
           </div>
           <button onClick={onClose} style={{ color:"var(--t3)", fontSize:22, background:"none", border:"none", cursor:"pointer", lineHeight:1 }}>✕</button>
         </div>
-
         <ModalField label="Full Name / Username" value={name}  onChange={setName}/>
         <ModalField label="Email"                value={email} onChange={setEmail} type="email"/>
         <ModalField label="Phone"                value={phone} onChange={setPhone} type="tel"/>
@@ -115,45 +126,20 @@ function EditModal({ user, onSave, onClose }) {
         <ModalField label="Trading Balance ($)"  value={tb}    onChange={setTb}    type="number"/>
         <ModalField label="Total Earned ($)"     value={earn}  onChange={setEarn}  type="number"/>
         <ModalField label="Withdrawn ($)"        value={wd}    onChange={setWd}    type="number"/>
-
         <div className="fg">
-          <label className="lbl" style={{ fontSize:10, letterSpacing:"1px", color:"var(--t3)", fontFamily:"var(--m)" }}>
-            TIER (SUBSCRIPTION)
-          </label>
-          <select
-            value={tier}
-            onChange={e => setTier(e.target.value)}
-            className="inp"
-            style={{ padding:"11px 14px", fontSize:13, background:"var(--ink)" }}
-          >
+          <label className="lbl" style={{ fontSize:10, letterSpacing:"1px", color:"var(--t3)", fontFamily:"var(--m)" }}>TIER (SUBSCRIPTION)</label>
+          <select value={tier} onChange={e => setTier(e.target.value)} className="inp" style={{ padding:"11px 14px", fontSize:13, background:"var(--ink)" }}>
             <option value="">No Tier</option>
-            {TIERS.map(t => (
-              <option key={t.id} value={String(t.id)}>
-                {t.name} — ${t.price.toLocaleString()} (+${t.profit}/trade)
-              </option>
-            ))}
+            {TIERS.map(t => (<option key={t.id} value={String(t.id)}>{t.name} — ${t.price.toLocaleString()} (+${t.profit}/trade)</option>))}
           </select>
-          <div style={{ fontSize:11, color:"var(--t3)", marginTop:4 }}>
-            Setting tier activates it immediately for the user.
-          </div>
+          <div style={{ fontSize:11, color:"var(--t3)", marginTop:4 }}>Setting tier activates it immediately for the user.</div>
         </div>
-
         <div className="fg">
-          <label className="lbl" style={{ fontSize:10, letterSpacing:"1px", color:"var(--t3)", fontFamily:"var(--m)" }}>
-            KYC STATUS
-          </label>
-          <select
-            value={kyc}
-            onChange={e => setKyc(e.target.value)}
-            className="inp"
-            style={{ padding:"11px 14px", fontSize:13, background:"var(--ink)" }}
-          >
-            {["none","pending","approved","rejected"].map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+          <label className="lbl" style={{ fontSize:10, letterSpacing:"1px", color:"var(--t3)", fontFamily:"var(--m)" }}>KYC STATUS</label>
+          <select value={kyc} onChange={e => setKyc(e.target.value)} className="inp" style={{ padding:"11px 14px", fontSize:13, background:"var(--ink)" }}>
+            {["none","pending","approved","rejected"].map(s => (<option key={s} value={s}>{s}</option>))}
           </select>
         </div>
-
         <div style={{ display:"flex", gap:10, marginTop:8 }}>
           <button className="btn btn-ghost" style={{ flex:1 }} onClick={onClose}>Cancel</button>
           <button className="btn btn-gold"  style={{ flex:2 }} onClick={save}>Save Changes</button>
@@ -208,23 +194,24 @@ export default function AdminPanel({onExit, role}){
          generateSignal,fetchSignals,approveDeposit,rejectDeposit,
          approveWithdrawal,rejectWithdrawal,
          fetchAdminDeposits,fetchAdminWithdrawals,fetchAdminUsers,fetchAdminDashboard,
+         fetchAdminUserTeam,
          updateAdminUser,broadcastNotif,setPriceWick} = useStore();
 
-  const [sec,     setSec]    = useState("dash");
-  const [users,   setUsers]  = useState([]);
-  const [deps,    setDeps]   = useState([]);
-  const [wds,     setWds]    = useState([]);
-  const [kycs,    setKycs]   = useState([]);
+  const [sec,      setSec]     = useState("dash");
+  const [users,    setUsers]   = useState([]);
+  const [deps,     setDeps]    = useState([]);
+  const [wds,      setWds]     = useState([]);
+  const [kycs,     setKycs]    = useState([]);
   const [dashboard,setDashboard] = useState(null);
   const HISTORY_STORAGE_KEY = "octatrade_admin_signal_history";
-  const [codes,   setCodes]  = useState([]);
+  const [codes,    setCodes]   = useState([]);
   const [signalHistory, setSignalHistory] = useState([]);
   const signalHistoryRef = useRef([]);
-  const [editU,   setEditU]  = useState(null);
-  const [loading, setLoading]= useState(false);
-  const [depF,    setDepF]   = useState("pending");
-  const [wdF,     setWdF]    = useState("pending");
-  const [kycF,    setKycF]   = useState("pending");
+  const [editU,    setEditU]   = useState(null);
+  const [loading,  setLoading] = useState(false);
+  const [depF,     setDepF]    = useState("pending");
+  const [wdF,      setWdF]     = useState("pending");
+  const [kycF,     setKycF]    = useState("pending");
   const [previewImage, setPreviewImage] = useState(null);
   const [uQ,setUQ]=useState(""); const [dQ,setDQ]=useState("");
   const [wQ,setWQ]=useState(""); const [kQ,setKQ]=useState("");
@@ -234,12 +221,19 @@ export default function AdminPanel({onExit, role}){
   const [nb,setNb]=useState({title:"",text:"",color:"#f0a500"});
   const [nf,setNf]=useState({title:"",body:""});
 
-  const timerRef = useRef(null);
+  // ── My Team state ──────────────────────────────────────
+  const [teamSearch,   setTeamSearch]   = useState("");
+  const [teamResult,   setTeamResult]   = useState(null);
+  const [teamLoading,  setTeamLoading]  = useState(false);
+  const [teamTab,      setTeamTab]      = useState("referrals");
+  const [teamMemberQ,  setTeamMemberQ]  = useState("");
+
+  const timerRef     = useRef(null);
+  const userPollRef  = useRef(null);
+  const codesPollRef = useRef(null);
 
   const persistHistory = (history) => {
-    try {
-      window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
-    } catch (e) {}
+    try { window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history)); } catch (e) {}
   };
 
   useEffect(() => {
@@ -248,39 +242,29 @@ export default function AdminPanel({onExit, role}){
       const saved = window.localStorage.getItem(HISTORY_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          signalHistoryRef.current = parsed;
-          setSignalHistory(parsed);
-        }
+        if (Array.isArray(parsed)) { signalHistoryRef.current = parsed; setSignalHistory(parsed); }
       }
     } catch (e) {}
   }, [isMain]);
-  const userPollRef = useRef(null);
-  const codesPollRef = useRef(null);
 
   useEffect(()=>{
     load(sec);
-    // General timer for dashboard, deposits, withdrawals, kyc
     timerRef.current = setInterval(()=>load(sec), 30_000);
     return()=>clearInterval(timerRef.current);
   // eslint-disable-next-line
   },[sec,depF,wdF,kycF]);
 
-  // Separate polling for users section - more frequent for real-time updates
   useEffect(()=>{
     if(sec === "users"){
-      // Initial load
       loadUsers();
-      // Poll every 3 seconds for real-time user updates
       userPollRef.current = setInterval(loadUsers, 3_000);
     } else {
       if(userPollRef.current) clearInterval(userPollRef.current);
     }
-    return()=> { if(userPollRef.current) clearInterval(userPollRef.current); };
+    return()=>{ if(userPollRef.current) clearInterval(userPollRef.current); };
   // eslint-disable-next-line
   },[sec]);
 
-  // Separate polling for codes section - refresh every 10 seconds to track expiration
   useEffect(()=>{
     if(sec === "codes"){
       load("codes");
@@ -288,7 +272,7 @@ export default function AdminPanel({onExit, role}){
     } else {
       if(codesPollRef.current) clearInterval(codesPollRef.current);
     }
-    return()=> { if(codesPollRef.current) clearInterval(codesPollRef.current); };
+    return()=>{ if(codesPollRef.current) clearInterval(codesPollRef.current); };
   // eslint-disable-next-line
   },[sec]);
 
@@ -303,8 +287,6 @@ export default function AdminPanel({onExit, role}){
       const stats = await fetchAdminDashboard();
       if(stats) setDashboard(stats);
     }
-    // Users are handled separately with more frequent polling
-    // if(s==="users"){ const d=await fetchAdminUsers(); if(Array.isArray(d))setUsers(d); }
     if(s==="deps"){
       const status=!isMain?"pending":depF==="all"?"":"pending";
       const d=await fetchAdminDeposits(status); if(Array.isArray(d))setDeps(d);
@@ -317,8 +299,6 @@ export default function AdminPanel({onExit, role}){
       const status=kycF==="all"?"all":kycF;
       const r=await af(`/admin/kyc${status?`?status=${status}`:""}`);
       if(r.ok){
-        // FIX: map kycDocFront/kycDocBack (schema field names) → kycFront/kycBack (UI names)
-        // Also map kycFullName → kycName for display, kycAddress for address display
         const raw = r.data.data?.users || r.data.users || [];
         setKycs(raw.map(u=>({
           id:        u._id,
@@ -328,10 +308,9 @@ export default function AdminPanel({onExit, role}){
           uid:       "OCT"+(u._id||"").slice(-6).toUpperCase(),
           address:   u.kycAddress || "",
           submitted: u.kycSubmittedAt
-            ? new Date(u.kycSubmittedAt).toLocaleDateString()
-            : u.createdAt?.split("T")[0] || "",
+  ? fmtDateTime(u.kycSubmittedAt)
+  : fmtDateTime(u.createdAt),
           status:    u.kycStatus,
-          // Map schema field names to the UI names used in the template below
           kycFront:  u.kycFront || u.kycDocFront || null,
           kycBack:   u.kycBack  || u.kycDocBack  || null,
         })));
@@ -345,22 +324,15 @@ export default function AdminPanel({onExit, role}){
           const expiresMs = new Date(sig.expiresAt).getTime();
           return !isNaN(expiresMs) && expiresMs > now;
         });
-
         if(isMain) {
           const mergedById = {};
           signals.forEach(sig => {
             const expiresMs = new Date(sig.expiresAt).getTime();
-            mergedById[sig._id] = {
-              ...sig,
-              isExpired: isNaN(expiresMs) ? false : expiresMs <= now,
-            };
+            mergedById[sig._id] = { ...sig, isExpired: isNaN(expiresMs) ? false : expiresMs <= now };
           });
           signalHistoryRef.current.forEach(sig => {
             if (!mergedById[sig._id]) {
-              mergedById[sig._id] = {
-                ...sig,
-                isExpired: !sig.expiresAt ? true : new Date(sig.expiresAt).getTime() <= now,
-              };
+              mergedById[sig._id] = { ...sig, isExpired: !sig.expiresAt ? true : new Date(sig.expiresAt).getTime() <= now };
             }
           });
           const mergedHistory = Object.values(mergedById).sort((a,b)=>new Date(b.createdAt) - new Date(a.createdAt));
@@ -370,18 +342,15 @@ export default function AdminPanel({onExit, role}){
           persistHistory(expiredHistory);
         } else {
           signalHistoryRef.current = [];
-          setSignalHistory([]); // Sub admin sees no history
+          setSignalHistory([]);
           persistHistory([]);
         }
-
         setCodes(activeSignals.map(sig => ({
-          code: sig.code,
-          pair: sig.coin.replace('USDT', ''),
+          code: sig.code, pair: sig.coin.replace('USDT', ''),
           side: sig.direction === 'LONG' ? 'BUY' : 'SELL',
           created: new Date(sig.createdAt).toLocaleString(),
           expires: new Date(sig.expiresAt).toLocaleString(),
-          used: sig.usageCount || 0,
-          status: 'active'
+          used: sig.usageCount || 0, status: 'active',
         })));
       }
     }
@@ -389,6 +358,26 @@ export default function AdminPanel({onExit, role}){
   };
 
   const refresh=()=>{load(sec);addToast("Refreshed","info");};
+
+  // ── My Team search handler ─────────────────────────────
+  const doTeamSearch = async () => {
+    if (!teamSearch.trim()) return;
+    setTeamLoading(true);
+    setTeamResult(null);
+    const q = teamSearch.trim().toLowerCase();
+    const found = users.find(u =>
+      u.name?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q) ||
+      u.uid?.toLowerCase().includes(q)
+    );
+    if (found) {
+      const data = await fetchAdminUserTeam(found.id);
+      setTeamResult(data ? { ...data, searchedUser: found } : { error: "Failed to load team data." });
+    } else {
+      setTeamResult({ error: "User not found. Make sure users are loaded — visit the Users tab first." });
+    }
+    setTeamLoading(false);
+  };
 
   const q=s=>s.toLowerCase();
   const visU = isMain?users:users.filter(u=>!u.isHidden);
@@ -398,19 +387,13 @@ export default function AdminPanel({onExit, role}){
   const fk = kycs.filter(k=>!kQ||(q(k.user||"").includes(q(kQ))||q(k.email||"").includes(q(kQ))));
 
   const saveU = async (u) => {
-  await updateAdminUser(u.id, {
-    name:      u.name,
-    email:     u.email,
-    phone:     u.phone,
-    fundBal:   u.fundBal,
-    tradeBal:  u.tradeBal,
-    earnings:  u.earnings,
-    withdrawn: u.withdrawn,
-    kycStatus: u.kycStatus,
-    tier:      u.tier,
-  });
-  setUsers(p => p.map(x => x.id === u.id ? {...x, ...u} : x));
-};
+    await updateAdminUser(u.id, {
+      name: u.name, email: u.email, phone: u.phone,
+      fundBal: u.fundBal, tradeBal: u.tradeBal, earnings: u.earnings,
+      withdrawn: u.withdrawn, kycStatus: u.kycStatus, tier: u.tier,
+    });
+    setUsers(p => p.map(x => x.id === u.id ? {...x, ...u} : x));
+  };
 
   const delU=async(id,name)=>{
     if(!window.confirm(`Delete ${name}? This cannot be undone.`))return;
@@ -425,9 +408,7 @@ export default function AdminPanel({onExit, role}){
       const u=users.find(x=>x.id===id);
       setUsers(p=>p.map(x=>x.id===id?{...x,isHidden:!x.isHidden}:x));
       addToast(u?.isHidden?"User now visible to Admin":"User hidden from Admin","info");
-    } else {
-      addToast(r.data?.message||"Failed to update visibility","err");
-    }
+    } else { addToast(r.data?.message||"Failed to update visibility","err"); }
   };
 
   const appD=async id=>{const ok=await approveDeposit(id);if(ok)setDeps(p=>p.map(d=>d.id===id?{...d,status:"approved"}:d));};
@@ -477,7 +458,6 @@ export default function AdminPanel({onExit, role}){
   ];
   const STATS = isMain ? STATS_MAIN : STATS_SUB;
 
-  // Build full image URL — handles data URIs and relative paths from backend
   const imgUrl = (p) => {
     if (!p) return null;
     if (/^(https?:|data:)/.test(p)) return p;
@@ -495,6 +475,7 @@ export default function AdminPanel({onExit, role}){
       {editU&&<EditModal user={editU} onSave={saveU} onClose={()=>setEditU(null)}/>}
       <div style={{width:"100%",maxWidth:"var(--max)",margin:"0 auto",height:"100dvh",display:"flex",flexDirection:"column",background:"var(--ink)",overflow:"hidden"}}>
 
+        {/* Header */}
         <div style={{height:52,flexShrink:0,background:"var(--ink2)",borderBottom:"1px solid var(--ln)",display:"flex",alignItems:"center",padding:"0 16px",gap:12}}>
           <button onClick={onExit} style={{display:"flex",alignItems:"center",gap:4,fontSize:13,color:"var(--t2)",background:"none",border:"none",cursor:"pointer"}}>
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>Exit
@@ -504,6 +485,7 @@ export default function AdminPanel({onExit, role}){
           <button onClick={onExit} style={{fontSize:11,color:"var(--dn)",fontWeight:700,background:"none",border:"none",cursor:"pointer"}}>Log Out</button>
         </div>
 
+        {/* Nav */}
         <div style={{flexShrink:0,background:"var(--ink2)",borderBottom:"1px solid var(--ln)",overflowX:"auto",display:"flex"}}>
           {MENU.map(m=>(
             <button key={m.id} onClick={()=>setSec(m.id)}
@@ -552,7 +534,6 @@ export default function AdminPanel({onExit, role}){
               <SearchBar onSearch={setUQ} placeholder="Search name, email, phone..."/>
               {loading&&<div style={{textAlign:"center",padding:20,color:"var(--t3)"}}>Loading users...</div>}
               {!loading&&fu.length===0&&<div className="empty"><div className="ei">👥</div><p style={{fontSize:13}}>No users found</p></div>}
-
               {fu.map(u=>(
                 <div key={u.id} className="card" style={{padding:14,marginBottom:10}}>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
@@ -573,30 +554,24 @@ export default function AdminPanel({onExit, role}){
                       <SB s={u.kycStatus??"none"}/>
                     </div>
                   </div>
-
-                  {(
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
-                      {[["Funding","$"+(u.fundBal??0).toFixed(0),"var(--blue)"],["Trading","$"+(u.tradeBal??0).toFixed(0),"var(--up)"],["Earned","$"+(u.earnings??0).toFixed(0),"var(--gold)"],["Withdrawn","$"+(u.withdrawn??0).toFixed(0),"var(--dn)"]].map(([l,v,c])=>(
-                        <div key={l} style={{background:"var(--ink2)",borderRadius:8,padding:"8px 10px"}}>
-                          <div style={{fontSize:9,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:2}}>{l}</div>
-                          <div style={{fontSize:12,fontWeight:700,fontFamily:"var(--m)",color:c}}>{v}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
+                    {[["Funding","$"+(u.fundBal??0).toFixed(0),"var(--blue)"],["Trading","$"+(u.tradeBal??0).toFixed(0),"var(--up)"],["Earned","$"+(u.earnings??0).toFixed(0),"var(--gold)"],["Withdrawn","$"+(u.withdrawn??0).toFixed(0),"var(--dn)"]].map(([l,v,c])=>(
+                      <div key={l} style={{background:"var(--ink2)",borderRadius:8,padding:"8px 10px"}}>
+                        <div style={{fontSize:9,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:2}}>{l}</div>
+                        <div style={{fontSize:12,fontWeight:700,fontFamily:"var(--m)",color:c}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
                   <div style={{background:"var(--ink2)",borderRadius:10,padding:"8px 12px",marginBottom:10,display:"flex",gap:16,flexWrap:"wrap"}}>
                     <span style={{fontSize:11,color:"var(--t3)"}}>UID: <strong style={{fontFamily:"var(--m)",color:"var(--gold)",letterSpacing:1}}>{u.uid||"—"}</strong></span>
                     <span style={{fontSize:11,color:"var(--t3)"}}>Ref by: <span style={{color:"var(--blue)"}}>{u.referredBy||"—"}</span></span>
                     <span style={{fontSize:11,color:"var(--t3)"}}>Referrals: <strong style={{color:getRefLevel(u.referralCount||0).color}}>{u.referralCount||0}</strong></span>
                   </div>
-
                   {isMain?(
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                       <button className="btn btn-outline btn-sm" style={{flex:"1 1 70px"}} onClick={()=>setEditU(u)}>✏️ Edit</button>
                       <button className="btn btn-red btn-sm"     style={{flex:"1 1 70px"}} onClick={()=>delU(u.id,u.name)}>🗑 Delete</button>
-                      <button
-                        onClick={()=>toggleHide(u.id)}
+                      <button onClick={()=>toggleHide(u.id)}
                         style={{flex:"1 1 70px",padding:"7px 10px",borderRadius:8,
                           border:`1.5px solid ${u.isHidden?"rgba(255,59,92,.4)":"rgba(255,165,0,.3)"}`,
                           background:u.isHidden?"rgba(255,59,92,.08)":"rgba(255,165,0,.08)",
@@ -605,11 +580,210 @@ export default function AdminPanel({onExit, role}){
                         {u.isHidden?"👁 Show":"🚫 Hide"}
                       </button>
                     </div>
-                  ):(
-                    null
-                  )}
+                  ):null}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* MY TEAM */}
+          {sec==="team"&&(
+            <div>
+              <div style={{fontWeight:800,fontSize:15,marginBottom:10}}>🌐 My Team Lookup</div>
+              <div style={{background:"var(--ink3)",border:"1px solid var(--ln)",borderRadius:12,padding:"12px 14px",marginBottom:16,fontSize:12,color:"var(--t3)",lineHeight:1.7}}>
+                Search any user to view their <strong style={{color:"var(--gold)"}}>My Referrals</strong> (direct, deposited) and <strong style={{color:"var(--blue)"}}>My Team</strong> (downline deposits). Chain breaks if a middle person has no deposit.
+              </div>
+
+              {/* Search */}
+              <div style={{display:"flex",gap:8,marginBottom:16}}>
+                <div className="iw" style={{flex:1,marginBottom:0}}>
+                  <input
+                    className="inp"
+                    placeholder="Search by name, email or UID..."
+                    value={teamSearch}
+                    onChange={e=>setTeamSearch(e.target.value)}
+                    onKeyDown={e=>{ if(e.key==="Enter") doTeamSearch(); }}
+                    style={{paddingLeft:40,fontSize:13}}
+                  />
+                  <div style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",color:"var(--t3)",pointerEvents:"none"}}>
+                    <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  </div>
+                </div>
+                <button className="btn btn-gold" style={{padding:"0 18px",fontSize:13,flexShrink:0}} disabled={teamLoading||!teamSearch.trim()} onClick={doTeamSearch}>
+                  {teamLoading ? "..." : "Search"}
+                </button>
+              </div>
+
+              {/* Hint if no users loaded */}
+              {users.length===0&&(
+                <div style={{background:"rgba(240,165,0,.06)",border:"1px solid rgba(240,165,0,.2)",borderRadius:10,padding:"10px 14px",fontSize:12,color:"var(--t2)",marginBottom:12}}>
+                  ⚠️ Users list is empty. Visit the <strong style={{color:"var(--gold)"}}>Users</strong> tab first so the search can find users.
+                </div>
+              )}
+
+              {/* Error */}
+              {teamResult?.error&&(
+                <div style={{background:"rgba(255,59,92,.08)",border:"1px solid rgba(255,59,92,.2)",borderRadius:12,padding:"12px 14px",fontSize:13,color:"var(--dn)"}}>
+                  ❌ {teamResult.error}
+                </div>
+              )}
+
+              {/* Results */}
+              {teamResult&&!teamResult.error&&(
+                <div>
+                  {/* Searched user card */}
+                  <div style={{background:"var(--ink3)",border:"1px solid var(--ln2)",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
+                    <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)",marginBottom:8,letterSpacing:1}}>SEARCHED USER</div>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,var(--gold),#c07800)",display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontWeight:900,fontSize:14,flexShrink:0}}>
+                        {(teamResult.user?.name||teamResult.searchedUser?.name||"?")[0].toUpperCase()}
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:700,fontSize:14}}>{teamResult.user?.name||teamResult.searchedUser?.name}</div>
+                        <div style={{fontSize:11,color:"var(--t2)"}}>{teamResult.user?.email||teamResult.searchedUser?.email}</div>
+                        <div style={{fontSize:10,color:"var(--gold)",fontFamily:"var(--m)",fontWeight:700,marginTop:2,letterSpacing:1}}>
+                          UID: OCT{String(teamResult.user?.id||"").slice(-6).toUpperCase()}
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:8,flexShrink:0}}>
+                        <div style={{textAlign:"center",background:"rgba(0,200,150,.1)",border:"1px solid rgba(0,200,150,.2)",borderRadius:10,padding:"8px 14px"}}>
+                          <div style={{fontFamily:"var(--m)",fontSize:20,fontWeight:900,color:"var(--up)"}}>{teamResult.myReferrals?.total||0}</div>
+                          <div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>REFERRALS</div>
+                        </div>
+                        <div style={{textAlign:"center",background:"rgba(45,156,255,.1)",border:"1px solid rgba(45,156,255,.2)",borderRadius:10,padding:"8px 14px"}}>
+                          <div style={{fontFamily:"var(--m)",fontSize:20,fontWeight:900,color:"var(--blue)"}}>{teamResult.myTeam?.total||0}</div>
+                          <div style={{fontSize:9,color:"var(--t3)",marginTop:2}}>TEAM</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabs */}
+                  <div style={{display:"flex",gap:8,marginBottom:12}}>
+                    {[
+                      ["referrals",`👥 My Referrals (${teamResult.myReferrals?.total||0})`,"var(--up)"],
+                      ["team",     `🌐 My Team (${teamResult.myTeam?.total||0})`,           "var(--blue)"],
+                    ].map(([id,label,color])=>(
+                      <button key={id} onClick={()=>{setTeamTab(id);setTeamMemberQ("");}}
+                        style={{flex:1,padding:"10px 8px",borderRadius:10,border:`1.5px solid ${teamTab===id?color:"var(--ln)"}`,background:teamTab===id?color+"18":"var(--ink3)",color:teamTab===id?color:"var(--t2)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Search inside results */}
+                  <div className="iw" style={{marginBottom:14}}>
+                    <input
+                      className="inp"
+                      placeholder="Filter by name, email or UID..."
+                      value={teamMemberQ}
+                      onChange={e=>setTeamMemberQ(e.target.value)}
+                      style={{paddingLeft:40,fontSize:13}}
+                    />
+                    <div style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",color:"var(--t3)",pointerEvents:"none"}}>
+                      <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </div>
+                  </div>
+
+                  {/* My Referrals list */}
+                  {teamTab==="referrals"&&(
+                    <div>
+                      {(teamResult.myReferrals?.members||[]).length===0&&(
+                        <div className="empty">
+                          <div className="ei">👥</div>
+                          <p style={{fontSize:13}}>No qualified referrals yet<br/><span style={{fontSize:11,color:"var(--t3)"}}>A referral must make an approved deposit to appear here</span></p>
+                        </div>
+                      )}
+                      {(teamResult.myReferrals?.members||[])
+                        .filter(m=> !teamMemberQ ||
+                          m.name?.toLowerCase().includes(teamMemberQ.toLowerCase()) ||
+                          m.email?.toLowerCase().includes(teamMemberQ.toLowerCase()) ||
+                          m.uid?.toLowerCase().includes(teamMemberQ.toLowerCase())
+                        )
+                        .map(m=>(
+                        <div key={String(m.id)} style={{background:"var(--ink3)",border:"1px solid var(--ln)",borderRadius:12,padding:"12px 14px",marginBottom:8}}>
+  <div style={{display:"flex",alignItems:"center",gap:10}}>
+    <div style={{width:34,height:34,borderRadius:8,background:"linear-gradient(135deg,var(--blue),#1a6fa8)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:12,flexShrink:0}}>
+      {(m.name||"?")[0].toUpperCase()}
+    </div>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontWeight:700,fontSize:13}}>{m.name}</div>
+      <div style={{fontSize:11,color:"var(--t2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.email}</div>
+      <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)",marginTop:2}}>
+        {m.uid} · Joined {m.joined}
+      </div>
+      {m.referredBy&&(
+        <div style={{fontSize:10,color:"var(--blue)",fontFamily:"var(--m)",marginTop:2}}>
+          👤 Ref by: <strong>{m.referredBy}</strong>
+        </div>
+      )}
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-end",flexShrink:0}}>
+      <span className="badge b-au" style={{fontSize:9}}>{m.tier}</span>
+      <SB s={m.kycStatus}/>
+      <span style={{
+        fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:6,
+        background:"rgba(0,200,150,.15)",
+        color:"var(--up)",
+        border:"1px solid rgba(0,200,150,.3)"
+      }}>✓ Deposited</span>
+    </div>
+  </div>
+</div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* My Team list */}
+                  {teamTab==="team"&&(
+                    <div>
+                      {(teamResult.myTeam?.members||[]).length===0&&(
+                        <div className="empty">
+                          <div className="ei">🌐</div>
+                          <p style={{fontSize:13}}>No team members yet<br/><span style={{fontSize:11,color:"var(--t3)"}}>Team = your referrals' referrals (and deeper), all must have deposited</span></p>
+                        </div>
+                      )}
+                      {(teamResult.myTeam?.members||[])
+                        .filter(m=> !teamMemberQ ||
+                          m.name?.toLowerCase().includes(teamMemberQ.toLowerCase()) ||
+                          m.email?.toLowerCase().includes(teamMemberQ.toLowerCase()) ||
+                          m.uid?.toLowerCase().includes(teamMemberQ.toLowerCase())
+                        )
+                        .map(m=>(
+                        <div key={String(m.id)} style={{background:"var(--ink3)",border:"1px solid var(--ln)",borderRadius:12,padding:"12px 14px",marginBottom:8}}>
+  <div style={{display:"flex",alignItems:"center",gap:10}}>
+    <div style={{width:34,height:34,borderRadius:8,background:"linear-gradient(135deg,var(--up),#009966)",display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontWeight:900,fontSize:12,flexShrink:0}}>
+      {(m.name||"?")[0].toUpperCase()}
+    </div>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontWeight:700,fontSize:13}}>{m.name}</div>
+      <div style={{fontSize:11,color:"var(--t2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.email}</div>
+      <div style={{fontSize:10,color:"var(--t3)",fontFamily:"var(--m)",marginTop:2}}>
+        {m.uid} · Joined {m.joined}
+      </div>
+      {m.referredBy&&(
+        <div style={{fontSize:10,color:"var(--blue)",fontFamily:"var(--m)",marginTop:2}}>
+          👤 Ref by: <strong>{m.referredBy}</strong>
+        </div>
+      )}
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-end",flexShrink:0}}>
+      <span className="badge b-au" style={{fontSize:9}}>{m.tier}</span>
+      <SB s={m.kycStatus}/>
+      <span style={{
+        fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:6,
+        background:"rgba(0,200,150,.15)",
+        color:"var(--up)",
+        border:"1px solid rgba(0,200,150,.3)"
+      }}>✓ Deposited</span>
+    </div>
+  </div>
+</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -639,7 +813,6 @@ export default function AdminPanel({onExit, role}){
                 )}
                 <button className="btn btn-purple btn-block" onClick={genSig} disabled={gBusy}>{gBusy?<><span className="spin spin-w"/>Generating...</>:"⚡ Generate Code"}</button>
               </div>
-              {/* ACTIVE CODES */}
               <div className="card" style={{padding:18,marginBottom:16}}>
                 <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>🔑 Active Signal Codes</div>
                 {codes.length===0&&<div className="empty"><div className="ei">🔑</div><p style={{fontSize:13}}>No active codes</p></div>}
@@ -657,13 +830,11 @@ export default function AdminPanel({onExit, role}){
                   </div>
                 ))}
               </div>
-
-              {/* SIGNAL HISTORY - MAIN ADMIN ONLY */}
               {isMain && (
                 <div className="card" style={{padding:18,marginTop:20}}>
                   <div style={{fontWeight:800,fontSize:15,marginBottom:14}}>📚 Signal History</div>
                   {signalHistory.length===0&&<div className="empty"><div className="ei">📚</div><p style={{fontSize:13}}>No signal history available</p></div>}
-                  {signalHistory.map((signal,i)=>(
+                  {signalHistory.map((signal)=>(
                     <div key={signal._id} style={{background:"var(--ink3)",border:"1px solid var(--ln)",borderRadius:12,padding:"13px 14px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <div>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
@@ -767,14 +938,10 @@ export default function AdminPanel({onExit, role}){
                     <div style={{fontSize:11,fontFamily:"var(--m)",color:"var(--blue)",wordBreak:"break-all"}}>{w.address}</div>
                   </div>
                   <div style={{marginBottom:w.status==="pending"?12:0}}>
-  <div style={{fontFamily:"var(--m)",fontSize:18,fontWeight:900,color:"var(--dn)"}}>-${w.amount}</div>
-  <div style={{fontSize:11,color:"var(--t3)",marginTop:3,lineHeight:1.7}}>
-    Platform fee (5%): -${(w.amount*0.05).toFixed(2)}
-  </div>
-  <div style={{fontSize:12,fontWeight:700,color:"var(--up)",marginTop:2}}>
-    User receives: ${(w.amount - (w.amount*0.05)).toFixed(2)}
-  </div>
-</div>
+                    <div style={{fontFamily:"var(--m)",fontSize:18,fontWeight:900,color:"var(--dn)"}}>-${w.amount}</div>
+                    <div style={{fontSize:11,color:"var(--t3)",marginTop:3,lineHeight:1.7}}>Platform fee (5%): -${(w.amount*0.05).toFixed(2)}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"var(--up)",marginTop:2}}>User receives: ${(w.amount-(w.amount*0.05)).toFixed(2)}</div>
+                  </div>
                   {w.status==="pending"&&<div style={{display:"flex",gap:8}}><button className="btn btn-green btn-sm" style={{flex:1}} onClick={()=>appW(w.id)}>✓ Approve</button><button className="btn btn-red btn-sm" style={{flex:1}} onClick={()=>rejW(w.id)}>✕ Reject</button></div>}
                 </div>
               ))}
@@ -794,14 +961,12 @@ export default function AdminPanel({onExit, role}){
                     <div>
                       <div style={{fontWeight:700,fontSize:14}}>{k.user}</div>
                       <div style={{fontSize:11,color:"var(--t2)",marginTop:2}}>{k.email}{k.phone?` · ${k.phone}`:""}</div>
-                      {/* Show submitted address */}
                       {k.address&&<div style={{fontSize:11,color:"var(--t3)",marginTop:2}}>📍 {k.address}</div>}
                       <div style={{fontSize:10,color:"var(--gold)",fontFamily:"var(--m)",fontWeight:700,marginTop:3,letterSpacing:1}}>UID: {k.uid}</div>
                       <div style={{fontSize:10,color:"var(--t3)",marginTop:2}}>Submitted: {k.submitted}</div>
                     </div>
                     <SB s={k.status}/>
                   </div>
-                  {/* CNIC images — kycFront/kycBack mapped from kycDocFront/kycDocBack */}
                   {(k.kycFront||k.kycBack)&&(
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                       {[["CNIC Front",k.kycFront],["CNIC Back",k.kycBack]].map(([label,url])=>{

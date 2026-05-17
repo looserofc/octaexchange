@@ -484,8 +484,17 @@ submitWithdrawal: async ({ amount, network, walletAddress }) => {
       const currTrades = get().activeTrades;
       const prevIds = new Set(prevTrades.map(t => t.id));
       const currIds = new Set(currTrades.map(t => t.id));
-      const completed = [...prevIds].some(id => !currIds.has(id));
-      if (completed) setTimeout(() => { get().fetchUserHistory(); }, 3000);
+      const completedIds = [...prevIds].filter(id => !currIds.has(id));
+      if (completedIds.length > 0) {
+        setTimeout(async () => {
+          await get().refreshBalances();
+          await get().fetchUserHistory();
+          const completed = prevTrades.filter(t => completedIds.includes(t.id));
+          completed.forEach(t => {
+            get().addToast(`✅ +$${(t.profit||0).toFixed(2)} added to Trading Account`, "ok");
+          });
+        }, 4000);
+      }
     };
     const id = setInterval(poll, 10000);
     set({ _tradePoller: id });

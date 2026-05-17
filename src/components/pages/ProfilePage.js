@@ -287,12 +287,20 @@ function TeamScreen({ user, onBack }) {
       </div>
       <div style={{ background:"linear-gradient(135deg,rgba(240,165,0,.08),rgba(240,165,0,.03))", border:"1px solid rgba(240,165,0,.2)", borderRadius:14, padding:"14px 16px", marginBottom:18 }}>
         <div style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>Your Referral Code</div>
-        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          <div style={{ flex:1, background:"var(--ink2)", border:"1px solid var(--ln2)", borderRadius:10, padding:"10px 14px", fontFamily:"var(--m)", fontSize:14, fontWeight:700, color:"var(--gold)", letterSpacing:2 }}>
-            {user.referralCode ?? "NXT00000"}
-          </div>
-          <button className="btn btn-gold btn-sm" onClick={() => { navigator.clipboard?.writeText(user.referralCode??"NXT00000"); useStore.getState().addToast("Copied!","ok"); }}>Share</button>
+        {/* Code row */}
+        <div style={{ background:"var(--ink2)", border:"1px solid var(--ln2)", borderRadius:10, padding:"8px 12px", marginBottom:8, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontFamily:"var(--m)", fontSize:14, fontWeight:700, color:"var(--gold)", letterSpacing:2 }}>{user.referralCode ?? "NXT00000"}</span>
+          <button className="btn btn-gold btn-sm" style={{ fontSize:11, padding:"4px 10px" }} onClick={() => { navigator.clipboard?.writeText(user.referralCode??"NXT00000"); useStore.getState().addToast("Code copied!","ok"); }}>Copy Code</button>
         </div>
+        {/* Link row */}
+        {user.referralCode && (
+          <div style={{ background:"var(--ink2)", border:"1px solid var(--ln2)", borderRadius:10, padding:"8px 12px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+            <span style={{ fontFamily:"var(--m)", fontSize:10, color:"var(--t3)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>
+              {typeof window !== "undefined" ? window.location.origin : ""}/ref/{user.referralCode}
+            </span>
+            <button className="btn btn-outline btn-sm" style={{ fontSize:11, padding:"4px 10px", flexShrink:0 }} onClick={() => { const link = `${window.location.origin}/ref/${user.referralCode}`; navigator.clipboard?.writeText(link); useStore.getState().addToast("Link copied!","ok"); }}>🔗 Copy Link</button>
+          </div>
+        )}
         <div style={{ fontSize:12, color:"var(--t2)", marginTop:8 }}>Earn <strong style={{ color:"var(--up)" }}>$5 bonus</strong> for every friend who deposits</div>
       </div>
       <div style={{ fontWeight:800, fontSize:15, marginBottom:12 }}>Team Members</div>

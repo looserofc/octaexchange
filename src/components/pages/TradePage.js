@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { COINS, fmtP } from "@/lib/data";
 import CoinIcon   from "@/components/ui/CoinIcon";
@@ -8,7 +8,7 @@ import dynamic    from "next/dynamic";
 const FuturesPage = dynamic(() => import("./FuturesPage"), { ssr: false });
 
 function CopyTradeContent({ setPage }) {
-  const{user,prices,activeTrades,removeTrade,orderHistory,addOrder,addToast,addTx,setUser,submitSignalCode,loadActiveTrades}=useStore();
+  const{user,prices,activeTrades,orderHistory,addToast,submitSignalCode,loadActiveTrades}=useStore();
   const[code,setCode]=useState(""),[busy,setBusy]=useState(false),[err,setErr]=useState(""),[ok,setOk]=useState("");
   const[htab,setHtab]=useState("open");
   const tradeBal=user?.tradingBalance??0;
@@ -31,15 +31,15 @@ function CopyTradeContent({ setPage }) {
     setCode("");
   };
 
-  const complete=useCallback(id=>{
-    const t=activeTrades.find(x=>x.id===id);if(!t)return;
-    const exit=prices[t.coin]??COINS[t.coin]?.price??0;
-    setUser({...user,tradingBalance:(user.tradingBalance||0)+t.profit,totalProfit:(user.totalProfit||0)+t.profit,totalTrades:(user.totalTrades||0)+1});
-    addOrder({id:t.id,pair:t.pair,coin:t.coin,type:"Copy Trade",side:t.side||"BUY",code:t.code,entryPrice:t.entry,exitPrice:exit,qty:t.qty||0,leverage:1,margin:0,pnl:t.profit,pnlPct:1.0,status:"CLOSED",openTime:t.openTime,closeTime:new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})});
-    removeTrade(id);
-    addTx({id:"tx"+Date.now(),type:"trade_profit",wallet:"trading",amount:t.profit,fee:0,net:t.profit,coin:t.pair,status:"completed",date:new Date().toLocaleDateString()});
-    addToast(`+$${t.profit.toFixed(2)} added to Trading Account`,"ok");
-  },[activeTrades,prices,user,setUser,addOrder,removeTrade,addTx,addToast]);
+  // const complete=useCallback(id=>{
+  //   const t=activeTrades.find(x=>x.id===id);if(!t)return;
+  //   const exit=prices[t.coin]??COINS[t.coin]?.price??0;
+  //   setUser({...user,tradingBalance:(user.tradingBalance||0)+t.profit,totalProfit:(user.totalProfit||0)+t.profit,totalTrades:(user.totalTrades||0)+1});
+  //   addOrder({id:t.id,pair:t.pair,coin:t.coin,type:"Copy Trade",side:t.side||"BUY",code:t.code,entryPrice:t.entry,exitPrice:exit,qty:t.qty||0,leverage:1,margin:0,pnl:t.profit,pnlPct:1.0,status:"CLOSED",openTime:t.openTime,closeTime:new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})});
+  //   removeTrade(id);
+  //   addTx({id:"tx"+Date.now(),type:"trade_profit",wallet:"trading",amount:t.profit,fee:0,net:t.profit,coin:t.pair,status:"completed",date:new Date().toLocaleDateString()});
+  //   addToast(`+$${t.profit.toFixed(2)} added to Trading Account`,"ok");
+  // },[activeTrades,prices,user,setUser,addOrder,removeTrade,addTx,addToast]);
 
   const copyOrders=orderHistory.filter(o=>o.type==="Copy Trade");
 
@@ -104,7 +104,7 @@ function CopyTradeContent({ setPage }) {
                       </div>
                       <div style={{fontSize:11,color:"var(--t2)",fontFamily:"var(--m)",marginTop:2}}>Code: {t.code}</div>
                     </div>
-                    <Countdown totalSeconds={300} onDone={()=>complete(t.id)} expiresAt={t.expiresAt}/>
+                    <Countdown totalSeconds={300} expiresAt={t.expiresAt}/>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
                     {[["ENTRY","$"+fmtP(coinSym,t.entry),"var(--t2)"],["CURRENT","$"+fmtP(coinSym,p),"var(--t1)"],["EST. PNL","+$"+(t.profit||0).toFixed(2),"var(--up)"]].map(([l,v,c])=>(

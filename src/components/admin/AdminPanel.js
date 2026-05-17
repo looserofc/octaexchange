@@ -740,7 +740,7 @@ export default function AdminPanel({onExit, role}){
                       {(teamResult.myTeam?.members||[]).length===0&&(
                         <div className="empty">
                           <div className="ei">🌐</div>
-                          <p style={{fontSize:13}}>No team members yet<br/><span style={{fontSize:11,color:"var(--t3)"}}>Team = your referrals' referrals (and deeper), all must have deposited</span></p>
+                          <p style={{fontSize:13}}>No team members yet<br/><span style={{fontSize:11,color:"var(--t3)"}}>Team = your referrals&apos; referrals (and deeper), all must have deposited</span></p>
                         </div>
                       )}
                       {(teamResult.myTeam?.members||[])

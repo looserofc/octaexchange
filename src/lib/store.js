@@ -664,7 +664,7 @@ export const useStore = create((set, get) => ({
         fundBal:        u.fundingBalance || 0,
         tradeBal:       u.tradingBalance || 0,
         earnings:       u.totalProfit   || 0,
-        withdrawn:      u.withdrawn     || 0,
+        withdrawn:      u.totalWithdrawn || 0,
         kycStatus:      u.kycStatus     || "none",
         // ── FIX: map hasDeposit from all possible API field names ──
         hasDeposit:     u.hasDeposit || u.hasApprovedDeposit || u.depositApproved || false,

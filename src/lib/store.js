@@ -313,16 +313,16 @@ export const useStore = create((set, get) => ({
   },
 
   logout: async () => {
-  try {
-    const refreshToken = typeof window !== "undefined"
-      ? localStorage.getItem("refreshToken")
-      : null;
-    await apiFetch("/auth/logout", {
-      method: "POST",
-      body: JSON.stringify({ refreshToken }),
-    });
-  } catch (_) {}
-  setTokenInternal(null, null);
+    try {
+      const refreshToken = typeof window !== "undefined"
+        ? localStorage.getItem("refreshToken")
+        : null;
+      await apiFetch("/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch (_) {}
+    setTokenInternal(null, null);
     get().stopTradePolling();
     set({
       user:null, adminAuthed:false, adminRole:null, showAdmin:false,
@@ -385,25 +385,21 @@ export const useStore = create((set, get) => ({
     } catch (_) { addToast("Network error","err"); return {success:false}; }
   },
 
-  // PATCH — only the submitWithdrawal function in store.js needs updating.
-// Replace the existing submitWithdrawal in your store with this:
-
-submitWithdrawal: async ({ amount, network, walletAddress }) => {
-  const { addToast, addTx, user, setUser } = get();
-  try {
-    const netMap = {trc20:"TRC20",erc20:"ERC20",bep20:"BEP20"};
-    const res = await apiFetch("/withdraw/submit",{method:"POST",body:JSON.stringify({amount, network:netMap[network]||network.toUpperCase(), walletAddress})});
-    const data = await res.json();
-    if (!res.ok) { addToast(data.message||"Withdrawal failed","err"); return {success:false, message:data.message}; }
-    const newFundBal = data.data?.fundingBalance ?? (user.fundingBalance - amount);
-    // Platform fee only (5%) — no network fee
-    const fee = parseFloat((amount * FUND_WD_FEE).toFixed(2));
-    setUser({...user, fundingBalance:newFundBal});
-    addTx({ id:"tx"+Date.now(), type:"withdrawal", label:"Withdrawal", wallet:"funding", amount, fee, net:amount-fee, network:network.toUpperCase(), status:"pending", date:new Date().toLocaleDateString(), address:walletAddress });
-    addToast("Withdrawal submitted","info");
-    return {success:true};
-  } catch (_) { addToast("Network error","err"); return {success:false}; }
-},
+  submitWithdrawal: async ({ amount, network, walletAddress }) => {
+    const { addToast, addTx, user, setUser } = get();
+    try {
+      const netMap = {trc20:"TRC20",erc20:"ERC20",bep20:"BEP20"};
+      const res = await apiFetch("/withdraw/submit",{method:"POST",body:JSON.stringify({amount, network:netMap[network]||network.toUpperCase(), walletAddress})});
+      const data = await res.json();
+      if (!res.ok) { addToast(data.message||"Withdrawal failed","err"); return {success:false, message:data.message}; }
+      const newFundBal = data.data?.fundingBalance ?? (user.fundingBalance - amount);
+      const fee = parseFloat((amount * FUND_WD_FEE).toFixed(2));
+      setUser({...user, fundingBalance:newFundBal});
+      addTx({ id:"tx"+Date.now(), type:"withdrawal", label:"Withdrawal", wallet:"funding", amount, fee, net:amount-fee, network:network.toUpperCase(), status:"pending", date:new Date().toLocaleDateString(), address:walletAddress });
+      addToast("Withdrawal submitted","info");
+      return {success:true};
+    } catch (_) { addToast("Network error","err"); return {success:false}; }
+  },
 
   transferToTrading: async (amount) => {
     const { addToast, addTx, user, setUser, fetchPendingVolume } = get();
@@ -597,52 +593,90 @@ submitWithdrawal: async ({ amount, network, walletAddress }) => {
     } catch (_) { return false; }
   },
 
+  // ── FIXED: fetchAdminDeposits — no hard limit, fetch all ─────────────────
   fetchAdminDeposits: async (status = "pending") => {
     try {
-      const qs = status ? `?status=${status}` : "";
-      const res = await apiFetch(`/admin/deposits${qs}`);
+      // Build query: pass limit=500 to get all records, filter by status if provided
+      const params = new URLSearchParams();
+      if (status) params.set("status", status);
+      params.set("limit", "500");
+      const res = await apiFetch(`/admin/deposits?${params.toString()}`);
       if (!res.ok) return [];
-      return (await res.json()).data?.deposits?.map(d=>({
-        id:d._id, user:d.userId?.fullName||"Unknown",
-        uid:d.userId?"OCT"+String(d.userId._id||d.userId).slice(-6).toUpperCase():"—",
-        tier:d.tier||"—", network:d.network||"—", hash:d.txId||"—",
-        amount:d.amount, status:d.status, date: fmtDateTime(d.createdAt),
-      })) || [];
+      const raw = await res.json();
+      const deposits = raw.data?.deposits || raw.deposits || [];
+      return deposits.map(d => ({
+        id:      d._id,
+        user:    d.userId?.fullName || d.userId?.email?.split("@")[0] || "Unknown",
+        email:   d.userId?.email   || "",
+        phone:   d.userId?.phone   || "",
+        uid:     d.userId ? "OCT" + String(d.userId._id || d.userId).slice(-6).toUpperCase() : "—",
+        tier:    d.tier    || "—",
+        network: d.network || "—",
+        hash:    d.txId    || "—",
+        amount:  d.amount,
+        status:  d.status,
+        date:    fmtDateTime(d.createdAt),
+      }));
     } catch (_) { return []; }
   },
 
+  // ── FIXED: fetchAdminWithdrawals — no hard limit, fetch all ──────────────
   fetchAdminWithdrawals: async (status = "pending") => {
     try {
-      const qs = status ? `?status=${status}` : "";
-      const res = await apiFetch(`/admin/withdrawals${qs}`);
+      const params = new URLSearchParams();
+      if (status) params.set("status", status);
+      params.set("limit", "500");
+      const res = await apiFetch(`/admin/withdrawals?${params.toString()}`);
       if (!res.ok) return [];
-      return (await res.json()).data?.withdrawals?.map(w=>({
-        id:w._id, user:w.userId?.fullName||"Unknown",
-        uid:w.userId?"OCT"+String(w.userId._id||w.userId).slice(-6).toUpperCase():"—",
-        amount:w.amount, fee:w.fee||0, netAmount:w.netAmount||w.amount,
-        network:w.network, address:w.walletAddress||"—",
-        status:w.status, date: fmtDateTime(w.createdAt),
-      })) || [];
+      const raw = await res.json();
+      const withdrawals = raw.data?.withdrawals || raw.withdrawals || [];
+      return withdrawals.map(w => ({
+        id:        w._id,
+        user:      w.userId?.fullName || w.userId?.email?.split("@")[0] || "Unknown",
+        email:     w.userId?.email   || "",
+        phone:     w.userId?.phone   || "",
+        uid:       w.userId ? "OCT" + String(w.userId._id || w.userId).slice(-6).toUpperCase() : "—",
+        amount:    w.amount,
+        fee:       w.fee       || 0,
+        netAmount: w.netAmount || w.amount,
+        network:   w.network,
+        address:   w.walletAddress || "—",
+        status:    w.status,
+        date:      fmtDateTime(w.createdAt),
+      }));
     } catch (_) { return []; }
   },
 
+  // ── FIXED: fetchAdminUsers — maps hasDeposit correctly ───────────────────
   fetchAdminUsers: async () => {
     try {
-      const res = await apiFetch("/admin/users");
+      const res = await apiFetch("/admin/users?limit=500");
       if (!res.ok) return [];
-      return (await res.json()).data?.users?.map(u => ({
-        id:u._id, name:u.fullName||u.email?.split("@")[0]||"—",
-        email:u.email||"—", phone:u.phone||"",
-        joined: fmtDateTime(u.createdAt),
-        tier:u.tier||"No Tier",
-        fundBal:u.fundingBalance||0, tradeBal:u.tradingBalance||0,
-        earnings:u.totalProfit||0, withdrawn:0, kycStatus:u.kycStatus||"none",
-        referralCount: u.qualifiedReferralCount ?? 0,
-        referralCode:u.referralCode||"",
-        uid:"OCT"+(u._id||"").slice(-6).toUpperCase(), isHidden:u.isHidden||false,
-        referredBy:u.referredBy?`${u.referredBy.fullName} (${u.referredBy.referralCode})`:null,
-        referredById:u.referredBy?._id||null,
-      })) || [];
+      const raw = await res.json();
+      const users = raw.data?.users || raw.users || [];
+      return users.map(u => ({
+        id:             u._id,
+        name:           u.fullName || u.email?.split("@")[0] || "—",
+        email:          u.email    || "—",
+        phone:          u.phone    || "",
+        joined:         fmtDateTime(u.createdAt),
+        tier:           u.tier     || "No Tier",
+        fundBal:        u.fundingBalance || 0,
+        tradeBal:       u.tradingBalance || 0,
+        earnings:       u.totalProfit   || 0,
+        withdrawn:      u.withdrawn     || 0,
+        kycStatus:      u.kycStatus     || "none",
+        // ── FIX: map hasDeposit from all possible API field names ──
+        hasDeposit:     u.hasDeposit || u.hasApprovedDeposit || u.depositApproved || false,
+        referralCount:  u.qualifiedReferralCount ?? u.referralCount ?? 0,
+        referralCode:   u.referralCode || "",
+        uid:            "OCT" + (u._id || "").slice(-6).toUpperCase(),
+        isHidden:       u.isHidden || false,
+        referredBy:     u.referredBy
+                          ? `${u.referredBy.fullName || u.referredBy.email} (${u.referredBy.referralCode || ""})`
+                          : null,
+        referredById:   u.referredBy?._id || null,
+      }));
     } catch (_) { return []; }
   },
 
@@ -654,11 +688,50 @@ submitWithdrawal: async ({ amount, network, walletAddress }) => {
     } catch (_) { return null; }
   },
 
+  // ── FIXED: fetchAdminUserTeam — maps referredBy for every member ─────────
   fetchAdminUserTeam: async (userId) => {
     try {
       const res = await apiFetch(`/admin/users/${userId}/team`);
       if (!res.ok) return null;
-      return (await res.json()).data || null;
+      const raw = (await res.json()).data || null;
+      if (!raw) return null;
+
+      // Helper to normalise a member object from the API
+      const normaliseMember = (m) => ({
+        id:         m._id || m.id,
+        name:       m.fullName || m.name || m.email?.split("@")[0] || "—",
+        email:      m.email   || "—",
+        phone:      m.phone   || "",
+        uid:        m.uid || ("OCT" + String(m._id || m.id || "").slice(-6).toUpperCase()),
+        tier:       m.tier    || "No Tier",
+        kycStatus:  m.kycStatus || "none",
+        joined:     m.joined  || fmtDateTime(m.createdAt) || "—",
+        // ── FIX: map referredBy for every member in My Team too ──
+        referredBy: m.referredBy
+          ? (typeof m.referredBy === "object"
+              ? (m.referredBy.fullName || m.referredBy.name || m.referredBy.email || "—")
+              : m.referredBy)
+          : (m.referredByName || m.referredByEmail || null),
+        hasDeposit: m.hasDeposit || m.hasApprovedDeposit || m.depositApproved || true,
+      });
+
+      return {
+        ...raw,
+        // Normalise myReferrals members
+        myReferrals: raw.myReferrals
+          ? {
+              ...raw.myReferrals,
+              members: (raw.myReferrals.members || []).map(normaliseMember),
+            }
+          : raw.myReferrals,
+        // Normalise myTeam members
+        myTeam: raw.myTeam
+          ? {
+              ...raw.myTeam,
+              members: (raw.myTeam.members || []).map(normaliseMember),
+            }
+          : raw.myTeam,
+      };
     } catch (_) { return null; }
   },
 
@@ -710,15 +783,15 @@ submitWithdrawal: async ({ amount, network, walletAddress }) => {
   _ct:{}, wick:null, setWick:w=>set({wick:w}),
 
   fetchRealPrices: async () => {
-  try {
-    const r = await fetch(`${API}/prices`, { cache: "no-store" });
-    if (!r.ok) return;
-    const data = await r.json();
-    const np = {...get().prices};
-    Object.entries(GID).forEach(([sym,id]) => { if(data[id]?.usd) np[sym]=data[id].usd; });
-    set({prices:np});
-  } catch (_) {}
-},
+    try {
+      const r = await fetch(`${API}/prices`, { cache: "no-store" });
+      if (!r.ok) return;
+      const data = await r.json();
+      const np = {...get().prices};
+      Object.entries(GID).forEach(([sym,id]) => { if(data[id]?.usd) np[sym]=data[id].usd; });
+      set({prices:np});
+    } catch (_) {}
+  },
 
   tickPrices: () => {
     set(state => {

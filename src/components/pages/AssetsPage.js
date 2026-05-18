@@ -75,7 +75,7 @@ export default function AssetsPage() {
   const [dHash,   setDHash]   = useState("");
   const [hashErr, setHashErr] = useState("");
   const [copied,  setCopied]  = useState(false);
-  const [wNet,    setWNet]    = useState("");
+  const [wNet,    setWNet]    = useState("bep20");
   const [wAmt,    setWAmt]    = useState("");
   const [wAddr,   setWAddr]   = useState("");
   const [wErrs,   setWErrs]   = useState({});
@@ -102,11 +102,12 @@ export default function AssetsPage() {
   }));
 
   // Network dropdown for withdrawal — no network fee shown
-  const wdNetOpts = NETWORKS.map(n => ({
-    id:  n.id,
-    name: n.name,
-    sub: `Min: $${MIN_WD} · 5% platform fee only`,
-  }));
+  // Network dropdown for withdrawal — BEP20 only
+const wdNetOpts = NETWORKS.filter(n => n.id === "bep20").map(n => ({
+  id:  n.id,
+  name: n.name,
+  sub: `Min: $${MIN_WD} · 5% platform fee only`,
+}));
 
   // Withdrawal preview — platform fee only, no network fee
   const wdAmt        = parseFloat(wAmt) || 0;

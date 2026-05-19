@@ -79,6 +79,7 @@ function buildCharts() {
   });
   return o;
 }
+
 function buildCandles(sym) {
   const base = COINS[sym].price, dir = COINS[sym].change >= 0 ? 1 : -1;
   const out = []; let price = base * .985;
@@ -90,6 +91,7 @@ function buildCandles(sym) {
   }
   return out;
 }
+
 function buildPrices() { const p = {}; Object.keys(COINS).forEach(k => { p[k] = COINS[k].price; }); return p; }
 
 function fmtDateTime(iso) {
@@ -191,15 +193,12 @@ export const useStore = create((set, get) => ({
 
   initSession: async () => {
     if (!_accessToken) return;
-
     try {
       const res = await apiFetch('/user/me');
-
       if (res.ok) {
         const data = await res.json();
         const user = data.data?.user || data.user;
         if (!user) return;
-
         if (user.role === "main_admin") {
           get().setAdminAuthed(true);
           get().setAdminRole("main");
@@ -214,7 +213,6 @@ export const useStore = create((set, get) => ({
           set({ user });
           return;
         }
-
         set({ user: mapApiUser(user) });
         get().fetchUserHistory();
         get().fetchNotifs();
@@ -224,9 +222,7 @@ export const useStore = create((set, get) => ({
       } else {
         setTokenInternal(null, null);
       }
-    } catch (_) {
-      // Network error — keep token, don't log user out
-    }
+    } catch (_) {}
   },
 
   fetchUserHistory: async () => {
@@ -264,10 +260,8 @@ export const useStore = create((set, get) => ({
       });
       const data = await res.json();
       if (!res.ok) return { success:false, message: data.message||"Invalid email or password" };
-
       const { accessToken, refreshToken, user } = data.data;
       setTokenInternal(accessToken, refreshToken);
-
       if (user.role === "main_admin") {
         setAdminAuthed(true); setAdminRole("main"); setShowAdmin(true);
         set({ user }); addToast("Welcome, Main Admin!", "ok");
@@ -278,7 +272,6 @@ export const useStore = create((set, get) => ({
         set({ user }); addToast("Welcome, Admin!", "ok");
         return { success:true, isAdmin:true };
       }
-
       set({ user: mapApiUser(user) });
       addToast("Welcome back!", "ok");
       fetchUserHistory();
@@ -593,10 +586,8 @@ export const useStore = create((set, get) => ({
     } catch (_) { return false; }
   },
 
-  // ── FIXED: fetchAdminDeposits — no hard limit, fetch all ─────────────────
   fetchAdminDeposits: async (status = "pending") => {
     try {
-      // Build query: pass limit=500 to get all records, filter by status if provided
       const params = new URLSearchParams();
       if (status) params.set("status", status);
       params.set("limit", "500");
@@ -620,7 +611,6 @@ export const useStore = create((set, get) => ({
     } catch (_) { return []; }
   },
 
-  // ── FIXED: fetchAdminWithdrawals — no hard limit, fetch all ──────────────
   fetchAdminWithdrawals: async (status = "pending") => {
     try {
       const params = new URLSearchParams();
@@ -647,7 +637,6 @@ export const useStore = create((set, get) => ({
     } catch (_) { return []; }
   },
 
-  // ── FIXED: fetchAdminUsers — maps hasDeposit correctly ───────────────────
   fetchAdminUsers: async () => {
     try {
       const res = await apiFetch("/admin/users?limit=500");
@@ -666,7 +655,6 @@ export const useStore = create((set, get) => ({
         earnings:       u.totalProfit   || 0,
         withdrawn:      u.totalWithdrawn || 0,
         kycStatus:      u.kycStatus     || "none",
-        // ── FIX: map hasDeposit from all possible API field names ──
         hasDeposit:     u.hasDeposit || u.hasApprovedDeposit || u.depositApproved || false,
         referralCount:  u.qualifiedReferralCount ?? u.referralCount ?? 0,
         referralCode:   u.referralCode || "",
@@ -688,7 +676,6 @@ export const useStore = create((set, get) => ({
     } catch (_) { return null; }
   },
 
-  // ── FIXED: fetchAdminUserTeam — maps referredBy for every member ─────────
   fetchAdminUserTeam: async (userId) => {
     try {
       const res = await apiFetch(`/admin/users/${userId}/team`);
@@ -696,7 +683,6 @@ export const useStore = create((set, get) => ({
       const raw = (await res.json()).data || null;
       if (!raw) return null;
 
-      // Helper to normalise a member object from the API
       const normaliseMember = (m) => ({
         id:         m._id || m.id,
         name:       m.fullName || m.name || m.email?.split("@")[0] || "—",
@@ -706,7 +692,6 @@ export const useStore = create((set, get) => ({
         tier:       m.tier    || "No Tier",
         kycStatus:  m.kycStatus || "none",
         joined:     m.joined  || fmtDateTime(m.createdAt) || "—",
-        // ── FIX: map referredBy for every member in My Team too ──
         referredBy: m.referredBy
           ? (typeof m.referredBy === "object"
               ? (m.referredBy.fullName || m.referredBy.name || m.referredBy.email || "—")
@@ -717,19 +702,11 @@ export const useStore = create((set, get) => ({
 
       return {
         ...raw,
-        // Normalise myReferrals members
         myReferrals: raw.myReferrals
-          ? {
-              ...raw.myReferrals,
-              members: (raw.myReferrals.members || []).map(normaliseMember),
-            }
+          ? { ...raw.myReferrals, members: (raw.myReferrals.members || []).map(normaliseMember) }
           : raw.myReferrals,
-        // Normalise myTeam members
         myTeam: raw.myTeam
-          ? {
-              ...raw.myTeam,
-              members: (raw.myTeam.members || []).map(normaliseMember),
-            }
+          ? { ...raw.myTeam, members: (raw.myTeam.members || []).map(normaliseMember) }
           : raw.myTeam,
       };
     } catch (_) { return null; }
@@ -758,9 +735,35 @@ export const useStore = create((set, get) => ({
     const { addToast } = get();
     try {
       const res = await apiFetch("/admin/notifications/broadcast",{method:"POST",body:JSON.stringify({title,message:body,type:"broadcast"})});
-      if (res.ok) addToast("Notification sent! ✅","ok");
+      if (res.ok) addToast("Notification sent to all users ✅","ok");
+      else {
+        const data = await res.json().catch(() => ({}));
+        addToast(data.message || "Failed to broadcast","err");
+      }
       return res.ok;
-    } catch (_) { return false; }
+    } catch (_) { addToast("Network error","err"); return false; }
+  },
+
+  // ── Send notification to a specific user ─────────────────────────────────
+  sendNotifToUser: async (userId, title, body) => {
+    const { addToast } = get();
+    try {
+      const res = await apiFetch("/admin/notifications/send-to-user", {
+        method: "POST",
+        body: JSON.stringify({ userId, title, message: body }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        addToast("Notification sent ✅", "ok");
+        return true;
+      } else {
+        addToast(data.message || "Failed to send notification", "err");
+        return false;
+      }
+    } catch (_) {
+      addToast("Network error — could not send notification", "err");
+      return false;
+    }
   },
 
   setPriceWick: async (sym, targetPrice, durationSeconds) => {
@@ -852,8 +855,18 @@ export const useStore = create((set, get) => ({
   addTx:tx=>set(s=>({txHistory:[tx,...s.txHistory]})),
 
   notifs:[],
-  markRead:id=>set(s=>({notifs:s.notifs.map(n=>n.id===id?{...n,read:true}:n)})),
-  markAllRead:()=>set(s=>({notifs:s.notifs.map(n=>({...n,read:true}))})),
+  markRead: async (id) => {
+  set(s => ({ notifs: s.notifs.map(n => n.id === id ? {...n, read:true} : n) }));
+  try {
+    await apiFetch(`/user/notifications/${id}/read`, { method: "PUT" });
+  } catch (_) {}
+},
+markAllRead: async () => {
+  set(s => ({ notifs: s.notifs.map(n => ({...n, read:true})) }));
+  try {
+    await apiFetch(`/user/notifications/read`, { method: "PUT" });
+  } catch (_) {}
+},
   addNotif:n=>set(s=>({notifs:[n,...s.notifs]})),
 
   banners:[...BANNERS_INIT],

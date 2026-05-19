@@ -18,16 +18,6 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 const PAGE_SIZE = 50;
 
-// Fetch ALL pages from a paginated API endpoint, assembling into one array.
-// Tries ?page=N&limit=200 style; falls back gracefully if API doesn't paginate.
-async function fetchAllPages(fetchFn, ...args) {
-  // fetchFn returns an array or null. We call it once to get everything —
-  // if the store function already handles pagination internally we just use it.
-  // For endpoints that are capped at 20 on the backend we call the raw API directly.
-  const first = await fetchFn(...args);
-  return Array.isArray(first) ? first : [];
-}
-
 const MENU_MAIN = [
   {id:"dash",   icon:"📊", label:"Dashboard"},
   {id:"users",  icon:"👥", label:"Users"},
@@ -39,7 +29,9 @@ const MENU_MAIN = [
   {id:"kyc",    icon:"🪪",  label:"KYC"},
   {id:"banners",icon:"🖼",  label:"Banners"},
   {id:"notifs", icon:"🔔", label:"Notifs"},
+  {id:"notify", icon:"📨", label:"Notify User"},
 ];
+
 const MENU_SUB = [
   {id:"dash",  icon:"📊", label:"Dashboard"},
   {id:"users", icon:"👥", label:"Users"},
@@ -55,106 +47,66 @@ function SB({s}){
   return <span className={`badge ${c}`} style={{fontSize:10}}>{s}</span>;
 }
 
-// ── Pagination Component ──────────────────────────────────────────────────────
 function Pagination({ page, totalPages, onPage }) {
   if (totalPages <= 1) return null;
-
   const pages = [];
-  // Always show first, last, current ±1, with ellipsis
   const range = new Set([1, totalPages, page, page - 1, page + 1].filter(p => p >= 1 && p <= totalPages));
   const sorted = [...range].sort((a, b) => a - b);
-
   for (let i = 0; i < sorted.length; i++) {
     if (i > 0 && sorted[i] - sorted[i - 1] > 1) pages.push("...");
     pages.push(sorted[i]);
   }
-
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px 0", flexWrap: "wrap" }}>
-      <button
-        onClick={() => onPage(page - 1)}
-        disabled={page === 1}
-        style={{
-          padding: "6px 11px", borderRadius: 8, border: "1px solid var(--ln)",
-          background: "var(--ink3)", color: page === 1 ? "var(--t3)" : "var(--t2)",
-          fontSize: 12, fontWeight: 700, cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.5 : 1
-        }}
-      >‹ Prev</button>
-
+      <button onClick={() => onPage(page - 1)} disabled={page === 1}
+        style={{ padding: "6px 11px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: page === 1 ? "var(--t3)" : "var(--t2)", fontSize: 12, fontWeight: 700, cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? 0.5 : 1 }}>
+        ‹ Prev
+      </button>
       {pages.map((p, i) =>
         p === "..." ? (
           <span key={`ellipsis-${i}`} style={{ color: "var(--t3)", fontSize: 12, padding: "0 4px" }}>…</span>
         ) : (
-          <button
-            key={p}
-            onClick={() => onPage(p)}
-            style={{
-              padding: "6px 11px", borderRadius: 8,
-              border: `1.5px solid ${p === page ? "var(--gold)" : "var(--ln)"}`,
-              background: p === page ? "rgba(240,165,0,.15)" : "var(--ink3)",
-              color: p === page ? "var(--gold)" : "var(--t2)",
-              fontSize: 12, fontWeight: 700, cursor: "pointer", minWidth: 34
-            }}
-          >{p}</button>
+          <button key={p} onClick={() => onPage(p)}
+            style={{ padding: "6px 11px", borderRadius: 8, border: `1.5px solid ${p === page ? "var(--gold)" : "var(--ln)"}`, background: p === page ? "rgba(240,165,0,.15)" : "var(--ink3)", color: p === page ? "var(--gold)" : "var(--t2)", fontSize: 12, fontWeight: 700, cursor: "pointer", minWidth: 34 }}>
+            {p}
+          </button>
         )
       )}
-
-      <button
-        onClick={() => onPage(page + 1)}
-        disabled={page === totalPages}
-        style={{
-          padding: "6px 11px", borderRadius: 8, border: "1px solid var(--ln)",
-          background: "var(--ink3)", color: page === totalPages ? "var(--t3)" : "var(--t2)",
-          fontSize: 12, fontWeight: 700, cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.5 : 1
-        }}
-      >Next ›</button>
-
-      <span style={{ fontSize: 11, color: "var(--t3)", marginLeft: 4 }}>
-        Page {page} of {totalPages}
-      </span>
+      <button onClick={() => onPage(page + 1)} disabled={page === totalPages}
+        style={{ padding: "6px 11px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: page === totalPages ? "var(--t3)" : "var(--t2)", fontSize: 12, fontWeight: 700, cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? 0.5 : 1 }}>
+        Next ›
+      </button>
+      <span style={{ fontSize: 11, color: "var(--t3)", marginLeft: 4 }}>Page {page} of {totalPages}</span>
     </div>
   );
 }
 
-// ── SearchBar ─────────────────────────────────────────────────────────────────
-function SearchBar({ onSearch, placeholder }) {
+function SearchBar({ value, onSearch, placeholder }) {
   return (
     <div className="iw" style={{ marginBottom: 14 }}>
       <input
         className="inp"
         placeholder={placeholder ?? "Search..."}
+        value={value ?? undefined}
         onChange={e => onSearch(e.target.value)}
         style={{ paddingLeft: 40, fontSize: 13 }}
       />
       <div style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "var(--t3)", pointerEvents: "none" }}>
-        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
+        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </div>
     </div>
   );
 }
 
-// ── ModalField ────────────────────────────────────────────────────────────────
 function ModalField({ label, value, onChange, type = "text" }) {
   return (
     <div className="fg">
-      <label className="lbl" style={{ fontSize: 10, letterSpacing: "1px", color: "var(--t3)", fontFamily: "var(--m)" }}>
-        {label.toUpperCase()}
-      </label>
-      <input
-        className="inp"
-        type={type}
-        value={value}
-        autoComplete="off"
-        onChange={e => onChange(e.target.value)}
-        style={{ padding: "11px 14px", fontSize: 14, background: "var(--ink)" }}
-      />
+      <label className="lbl" style={{ fontSize: 10, letterSpacing: "1px", color: "var(--t3)", fontFamily: "var(--m)" }}>{label.toUpperCase()}</label>
+      <input className="inp" type={type} value={value} autoComplete="off" onChange={e => onChange(e.target.value)} style={{ padding: "11px 14px", fontSize: 14, background: "var(--ink)" }}/>
     </div>
   );
 }
 
-// ── EditModal ─────────────────────────────────────────────────────────────────
 function EditModal({ user, onSave, onClose }) {
   const [name,  setName]  = useState(user.name       || "");
   const [email, setEmail] = useState(user.email      || "");
@@ -172,33 +124,17 @@ function EditModal({ user, onSave, onClose }) {
   }, []);
 
   const save = () => {
-    onSave({
-      ...user,
-      name, email, phone,
-      fundBal:   parseFloat(fb)   || 0,
-      tradeBal:  parseFloat(tb)   || 0,
-      earnings:  parseFloat(earn) || 0,
-      withdrawn: parseFloat(wd)   || 0,
-      tier, kycStatus: kyc,
-    });
+    onSave({ ...user, name, email, phone, fundBal: parseFloat(fb)||0, tradeBal: parseFloat(tb)||0, earnings: parseFloat(earn)||0, withdrawn: parseFloat(wd)||0, tier, kycStatus: kyc });
     onClose();
   };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", backdropFilter: "blur(8px)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
-      onClick={onClose}
-    >
-      <div
-        style={{ background: "var(--ink3)", border: "1px solid var(--ln2)", borderRadius: 20, padding: 24, width: "100%", maxWidth: 440, maxHeight: "92dvh", overflowY: "auto" }}
-        onClick={e => e.stopPropagation()}
-      >
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", backdropFilter: "blur(8px)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div style={{ background: "var(--ink3)", border: "1px solid var(--ln2)", borderRadius: 20, padding: 24, width: "100%", maxWidth: 440, maxHeight: "92dvh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: 17 }}>Edit User</div>
-            <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 2 }}>
-              UID: <span style={{ color: "var(--gold)", fontFamily: "var(--m)" }}>{user.uid || "—"}</span>
-            </div>
+            <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 2 }}>UID: <span style={{ color: "var(--gold)", fontFamily: "var(--m)" }}>{user.uid || "—"}</span></div>
           </div>
           <button onClick={onClose} style={{ color: "var(--t3)", fontSize: 22, background: "none", border: "none", cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
@@ -213,18 +149,14 @@ function EditModal({ user, onSave, onClose }) {
           <label className="lbl" style={{ fontSize: 10, letterSpacing: "1px", color: "var(--t3)", fontFamily: "var(--m)" }}>TIER (SUBSCRIPTION)</label>
           <select value={tier} onChange={e => setTier(e.target.value)} className="inp" style={{ padding: "11px 14px", fontSize: 13, background: "var(--ink)" }}>
             <option value="">No Tier</option>
-            {TIERS.map(t => (
-              <option key={t.id} value={String(t.id)}>{t.name} — ${t.price.toLocaleString()} (+${t.profit}/trade)</option>
-            ))}
+            {TIERS.map(t => (<option key={t.id} value={String(t.id)}>{t.name} — ${t.price.toLocaleString()} (+${t.profit}/trade)</option>))}
           </select>
           <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 4 }}>Setting tier activates it immediately for the user.</div>
         </div>
         <div className="fg">
           <label className="lbl" style={{ fontSize: 10, letterSpacing: "1px", color: "var(--t3)", fontFamily: "var(--m)" }}>KYC STATUS</label>
           <select value={kyc} onChange={e => setKyc(e.target.value)} className="inp" style={{ padding: "11px 14px", fontSize: 13, background: "var(--ink)" }}>
-            {["none","pending","approved","rejected"].map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+            {["none","pending","approved","rejected"].map(s => (<option key={s} value={s}>{s}</option>))}
           </select>
         </div>
         <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
@@ -236,7 +168,6 @@ function EditModal({ user, onSave, onClose }) {
   );
 }
 
-// ── API helper ────────────────────────────────────────────────────────────────
 async function af(path, opts = {}) {
   try {
     const token = useStore.getState()._token;
@@ -259,7 +190,6 @@ async function af(path, opts = {}) {
   }
 }
 
-// ── FilterRow ─────────────────────────────────────────────────────────────────
 function FilterRow({ value, onChange, opts, onRefresh }) {
   return (
     <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
@@ -274,31 +204,21 @@ function FilterRow({ value, onChange, opts, onRefresh }) {
   );
 }
 
-// ── Deposited Badge ───────────────────────────────────────────────────────────
 function DepositedBadge() {
   return (
-    <span style={{
-      fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6,
-      background: "rgba(0,200,150,.15)", color: "var(--up)",
-      border: "1px solid rgba(0,200,150,.3)"
-    }}>✓ Deposited</span>
+    <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: "rgba(0,200,150,.15)", color: "var(--up)", border: "1px solid rgba(0,200,150,.3)" }}>✓ Deposited</span>
   );
 }
 
-// ── usePagination hook ────────────────────────────────────────────────────────
 function usePagination(items, pageSize = PAGE_SIZE) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const slice = items.slice((safePage - 1) * pageSize, safePage * pageSize);
-
-  // Reset to page 1 whenever items change length significantly
   useEffect(() => { setPage(1); }, [items.length]);
-
   return { page: safePage, totalPages, slice, setPage };
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
 export default function AdminPanel({ onExit, role }) {
   const isMain = role === "main";
   const MENU   = isMain ? MENU_MAIN : MENU_SUB;
@@ -310,7 +230,7 @@ export default function AdminPanel({ onExit, role }) {
     approveWithdrawal, rejectWithdrawal,
     fetchAdminDeposits, fetchAdminWithdrawals, fetchAdminUsers, fetchAdminDashboard,
     fetchAdminUserTeam,
-    updateAdminUser, broadcastNotif, setPriceWick
+    updateAdminUser, broadcastNotif, sendNotifToUser, setPriceWick,
   } = useStore();
 
   const [sec,       setSec]      = useState("dash");
@@ -332,11 +252,10 @@ export default function AdminPanel({ onExit, role }) {
   const [kycF,     setKycF]    = useState("pending");
   const [previewImage, setPreviewImage] = useState(null);
 
-  // Search states — extended
-  const [uQ,  setUQ]  = useState("");   // users: name/email/phone/uid
-  const [dQ,  setDQ]  = useState("");   // deposits: name/email/phone/uid/txhash
-  const [wQ,  setWQ]  = useState("");   // withdrawals: name/email/phone/uid/wallet
-  const [kQ,  setKQ]  = useState("");   // kyc: name/email/phone/uid
+  const [uQ,  setUQ]  = useState("");
+  const [dQ,  setDQ]  = useState("");
+  const [wQ,  setWQ]  = useState("");
+  const [kQ,  setKQ]  = useState("");
 
   const [selPair, setSelPair] = useState(PAIRS[0]);
   const [selSide, setSelSide] = useState("BUY");
@@ -348,7 +267,14 @@ export default function AdminPanel({ onExit, role }) {
   const [nb, setNb] = useState({ title: "", text: "", color: "#f0a500" });
   const [nf, setNf] = useState({ title: "", body: "" });
 
-  // My Team state
+  // ── Notify User state ──────────────────────────────────────────────────────
+  const [notifySearch,   setNotifySearch]   = useState("");
+  const [notifySelected, setNotifySelected] = useState(null);
+  const [notifyTitle,    setNotifyTitle]    = useState("");
+  const [notifyBody,     setNotifyBody]     = useState("");
+  const [notifySending,  setNotifySending]  = useState(false);
+  const [notifyLoading,  setNotifyLoading]  = useState(false);
+
   const [teamSearch,  setTeamSearch]  = useState("");
   const [teamResult,  setTeamResult]  = useState(null);
   const [teamLoading, setTeamLoading] = useState(false);
@@ -403,9 +329,24 @@ export default function AdminPanel({ onExit, role }) {
   // eslint-disable-next-line
   }, [sec]);
 
+  // ── Auto-load users when navigating to Notify User tab ────────────────────
+  useEffect(() => {
+    if (sec === "notify" && users.length === 0) {
+      loadUsersForNotify();
+    }
+  // eslint-disable-next-line
+  }, [sec]);
+
   const loadUsers = async () => {
     const d = await fetchAdminUsers();
     if (Array.isArray(d)) setUsers(d);
+  };
+
+  const loadUsersForNotify = async () => {
+    setNotifyLoading(true);
+    const d = await fetchAdminUsers();
+    if (Array.isArray(d)) setUsers(d);
+    setNotifyLoading(false);
   };
 
   const load = async (s) => {
@@ -414,10 +355,11 @@ export default function AdminPanel({ onExit, role }) {
       const stats = await fetchAdminDashboard();
       if (stats) setDashboard(stats);
     }
+    if (s === "notify") {
+      const d = await fetchAdminUsers();
+      if (Array.isArray(d)) setUsers(d);
+    }
     if (s === "deps") {
-      // Call API directly with limit=1000 to bypass the backend 20-record default cap
-      // Sub-admin always sees pending only
-      // Main admin: "all" = no status filter; any other value passed directly
       const statusParam = !isMain ? "pending" : depF === "all" ? "" : depF;
       const qs = statusParam ? `status=${statusParam}&limit=1000` : "limit=1000";
       const r = await af(`/admin/deposits?${qs}`);
@@ -426,33 +368,23 @@ export default function AdminPanel({ onExit, role }) {
         const arr = Array.isArray(raw) ? raw : [];
         setDeps(arr.map(d => ({
           id:      d._id,
-          // store.js confirms the populated field is userId (not user)
           user:    d.userId?.fullName || d.user?.fullName || d.fullName || "—",
           email:   d.userId?.email   || d.user?.email   || d.email   || "",
           phone:   d.userId?.phone   || d.user?.phone   || d.phone   || "",
-          uid:     d.userId
-                    ? "OCT" + String(d.userId._id || d.userId).slice(-6).toUpperCase()
-                    : d.user
-                      ? "OCT" + String(d.user._id || d.user).slice(-6).toUpperCase()
-                      : (d.uid || ""),
+          uid:     d.userId ? "OCT" + String(d.userId._id || d.userId).slice(-6).toUpperCase() : d.user ? "OCT" + String(d.user._id || d.user).slice(-6).toUpperCase() : (d.uid || ""),
           tier:    d.tier || d.userId?.tier || d.user?.tier || "",
           network: d.network || d.chain || "",
-          // store.js uses d.txId (not d.txHash)
           hash:    d.txId || d.txHash || d.hash || d.transactionHash || "",
           amount:  Number(d.amount || 0),
           status:  d.status,
           date:    fmtDateTime(d.createdAt),
         })));
       } else {
-        // Fallback to store helper if direct call fails (e.g. different API structure)
         const d = await fetchAdminDeposits(statusParam);
         if (Array.isArray(d)) setDeps(d);
       }
     }
     if (s === "wds") {
-      // Call API directly with limit=1000 to bypass the backend 20-record default cap
-      // Sub-admin always sees pending only
-      // Main admin: "all" = no status filter; any other value passed directly
       const statusParam = !isMain ? "pending" : wdF === "all" ? "" : wdF;
       const qs = statusParam ? `status=${statusParam}&limit=1000` : "limit=1000";
       const r = await af(`/admin/withdrawals?${qs}`);
@@ -461,33 +393,23 @@ export default function AdminPanel({ onExit, role }) {
         const arr = Array.isArray(raw) ? raw : [];
         setWds(arr.map(w => ({
           id:      w._id,
-          // store.js confirms the populated field is userId (not user)
           user:    w.userId?.fullName || w.user?.fullName || w.fullName || "—",
           email:   w.userId?.email   || w.user?.email   || w.email   || "",
           phone:   w.userId?.phone   || w.user?.phone   || w.phone   || "",
-          uid:     w.userId
-                    ? "OCT" + String(w.userId._id || w.userId).slice(-6).toUpperCase()
-                    : w.user
-                      ? "OCT" + String(w.user._id || w.user).slice(-6).toUpperCase()
-                      : (w.uid || ""),
+          uid:     w.userId ? "OCT" + String(w.userId._id || w.userId).slice(-6).toUpperCase() : w.user ? "OCT" + String(w.user._id || w.user).slice(-6).toUpperCase() : (w.uid || ""),
           network: w.network || w.chain || "",
-          // store.js uses w.walletAddress
           address: w.walletAddress || w.address || "",
           amount:  Number(w.amount || 0),
           status:  w.status,
           date:    fmtDateTime(w.createdAt),
         })));
       } else {
-        // Fallback to store helper if direct call fails
         const d = await fetchAdminWithdrawals(statusParam);
         if (Array.isArray(d)) setWds(d);
       }
     }
     if (s === "kyc") {
-      // Backend: const { status = 'pending', limit = 20 } = req.query
-      // "all" → backend checks status==="all" → sets { $ne: "none" } — must send literally "all"
-      // Empty string would fall to default "pending" via destructuring
-      const status = kycF; // send "pending", "approved", "rejected", or "all" as-is
+      const status = kycF;
       const r = await af(`/admin/kyc?status=${status}&limit=1000`);
       if (r.ok) {
         const raw = r.data.data?.users || r.data.users || r.data.data || [];
@@ -549,46 +471,25 @@ export default function AdminPanel({ onExit, role }) {
 
   const refresh = () => { load(sec); addToast("Refreshed", "info"); };
 
-  // ── My Team search ──────────────────────────────────────────────────────────
-  // Normalise a member object coming from the team API — ensures referredBy is always present
-  // normaliseTeamMember: resolves referredBy name from every possible backend shape.
-  // Backend getUserTeam:
-  //   - myReferrals members: allDirect.populate("referredBy","fullName") ✅ populated
-  //   - myTeam members: BFS children fetched WITHOUT populate ❌ referredBy = raw ObjectId
-  // So for team members we cross-reference against the `users` array (already loaded).
   const normaliseTeamMember = (m) => {
     let refBy = null;
-
     if (m.referredBy) {
       if (typeof m.referredBy === "object" && m.referredBy !== null) {
-        // Populated object: { fullName, name, _id, ... }
         refBy = m.referredBy.fullName || m.referredBy.name || null;
       } else if (typeof m.referredBy === "string") {
-        // Raw string — could be a name or a 24-char hex ObjectId
         const isObjectId = /^[0-9a-fA-F]{24}$/.test(m.referredBy);
         if (isObjectId) {
-          // Cross-reference against already-loaded users list
           const match = users.find(u => u.id === m.referredBy || u.id?.toString() === m.referredBy);
           refBy = match ? match.name : null;
         } else {
-          refBy = m.referredBy; // it's already a readable name
+          refBy = m.referredBy;
         }
       }
     }
-
-    // Fallback chains for other possible field names
     if (!refBy) {
-      refBy = m.referredByName ||
-              m.referredByUser?.fullName || m.referredByUser?.name ||
-              m.referrer?.fullName       || m.referrer?.name       ||
-              m.referredByInfo?.fullName || m.referredByInfo?.name ||
-              m.parent?.fullName         || m.parent?.name         ||
-              null;
+      refBy = m.referredByName || m.referredByUser?.fullName || m.referredByUser?.name || m.referrer?.fullName || m.referrer?.name || m.referredByInfo?.fullName || m.referredByInfo?.name || m.parent?.fullName || m.parent?.name || null;
     }
-
-    // Strip trailing " (CODE)" if present
     if (refBy && refBy.includes(" (")) refBy = refBy.split(" (")[0].trim();
-
     return { ...m, referredBy: refBy };
   };
 
@@ -605,69 +506,33 @@ export default function AdminPanel({ onExit, role }) {
     if (found) {
       const data = await fetchAdminUserTeam(found.id);
       if (data) {
-        // Build an id→name lookup from ALL sources so we can resolve raw ObjectIds:
-        // 1. The searched user themselves
-        // 2. All already-loaded admin users
-        // 3. All referral members (populated, have names)
-        // 4. All team members (may have names too)
         const idToName = {};
-        // From already-loaded users list
         users.forEach(u => { if (u.id) idToName[String(u.id)] = u.name; });
-        // The searched user — their id resolves to their name
         if (found.id) idToName[String(found.id)] = found.name;
-        // From referral members (backend populates referredBy for these)
-        (data.myReferrals?.members || []).forEach(m => {
-          if (m.id) idToName[String(m.id)] = m.name;
-        });
-        // From team members
-        (data.myTeam?.members || []).forEach(m => {
-          if (m.id) idToName[String(m.id)] = m.name;
-        });
+        (data.myReferrals?.members || []).forEach(m => { if (m.id) idToName[String(m.id)] = m.name; });
+        (data.myTeam?.members || []).forEach(m => { if (m.id) idToName[String(m.id)] = m.name; });
 
-        // Normalise with the enriched lookup available
         const normaliseWithMap = (m) => {
           let refBy = null;
-
           if (m.referredBy) {
             if (typeof m.referredBy === "object" && m.referredBy !== null) {
-              // Populated object from backend
               refBy = m.referredBy.fullName || m.referredBy.name || null;
             } else if (typeof m.referredBy === "string") {
               const isObjectId = /^[0-9a-fA-F]{24}$/.test(m.referredBy);
-              if (isObjectId) {
-                // Resolve via our lookup map
-                refBy = idToName[m.referredBy] || null;
-              } else {
-                refBy = m.referredBy;
-              }
+              if (isObjectId) { refBy = idToName[m.referredBy] || null; }
+              else { refBy = m.referredBy; }
             }
           }
-
-          // Fallback to other field names
-          if (!refBy) {
-            refBy = m.referredByName ||
-                    m.referredByUser?.fullName || m.referredByUser?.name ||
-                    m.referrer?.fullName       || m.referrer?.name       ||
-                    null;
-          }
-
-          // Strip "(CODE)" suffix
+          if (!refBy) { refBy = m.referredByName || m.referredByUser?.fullName || m.referredByUser?.name || m.referrer?.fullName || m.referrer?.name || null; }
           if (refBy && refBy.includes(" (")) refBy = refBy.split(" (")[0].trim();
-
           return { ...m, referredBy: refBy };
         };
 
         const normalised = {
           ...data,
           searchedUser: found,
-          myReferrals: data.myReferrals ? {
-            ...data.myReferrals,
-            members: (data.myReferrals.members || []).map(normaliseWithMap),
-          } : data.myReferrals,
-          myTeam: data.myTeam ? {
-            ...data.myTeam,
-            members: (data.myTeam.members || []).map(normaliseWithMap),
-          } : data.myTeam,
+          myReferrals: data.myReferrals ? { ...data.myReferrals, members: (data.myReferrals.members || []).map(normaliseWithMap) } : data.myReferrals,
+          myTeam: data.myTeam ? { ...data.myTeam, members: (data.myTeam.members || []).map(normaliseWithMap) } : data.myTeam,
         };
         setTeamResult(normalised);
       } else {
@@ -679,75 +544,40 @@ export default function AdminPanel({ onExit, role }) {
     setTeamLoading(false);
   };
 
-
-  // ── Filter helpers ──────────────────────────────────────────────────────────
   const q = s => (s || "").toLowerCase();
-
   const visU = isMain ? users : users.filter(u => !u.isHidden);
 
-  // Users: search by name, email, phone, UID
   const fu = useMemo(() => visU.filter(u => {
     if (!uQ) return true;
     const qq = q(uQ);
-    return (
-      q(u.name).includes(qq) ||
-      q(u.email).includes(qq) ||
-      q(u.phone).includes(qq) ||
-      q(u.uid).includes(qq)
-    );
+    return q(u.name).includes(qq) || q(u.email).includes(qq) || q(u.phone).includes(qq) || q(u.uid).includes(qq);
   }), [visU, uQ]);
 
-  // Deposits: search by name, email, phone, UID, TX hash
   const fd = useMemo(() => deps.filter(d => {
     if (!dQ) return true;
     const qq = q(dQ);
-    return (
-      q(d.user).includes(qq) ||
-      q(d.email).includes(qq) ||
-      q(d.phone).includes(qq) ||
-      q(d.uid).includes(qq) ||
-      q(d.hash).includes(qq)
-    );
+    return q(d.user).includes(qq) || q(d.email).includes(qq) || q(d.phone).includes(qq) || q(d.uid).includes(qq) || q(d.hash).includes(qq);
   }), [deps, dQ]);
 
-  // Withdrawals: search by name, email, phone, UID, wallet address
   const fw = useMemo(() => wds.filter(w => {
     if (!wQ) return true;
     const qq = q(wQ);
-    return (
-      q(w.user).includes(qq) ||
-      q(w.email).includes(qq) ||
-      q(w.phone).includes(qq) ||
-      q(w.uid).includes(qq) ||
-      q(w.address).includes(qq)
-    );
+    return q(w.user).includes(qq) || q(w.email).includes(qq) || q(w.phone).includes(qq) || q(w.uid).includes(qq) || q(w.address).includes(qq);
   }), [wds, wQ]);
 
-  // KYC: search by name, email, phone, UID
   const fk = useMemo(() => kycs.filter(k => {
     if (!kQ) return true;
     const qq = q(kQ);
-    return (
-      q(k.user).includes(qq) ||
-      q(k.email).includes(qq) ||
-      q(k.phone).includes(qq) ||
-      q(k.uid).includes(qq)
-    );
+    return q(k.user).includes(qq) || q(k.email).includes(qq) || q(k.phone).includes(qq) || q(k.uid).includes(qq);
   }), [kycs, kQ]);
 
-  // ── Paginations ─────────────────────────────────────────────────────────────
   const usersPag = usePagination(fu);
   const depsPag  = usePagination(fd);
   const wdsPag   = usePagination(fw);
   const kycPag   = usePagination(fk);
 
-  // ── Actions ─────────────────────────────────────────────────────────────────
   const saveU = async (u) => {
-    await updateAdminUser(u.id, {
-      name: u.name, email: u.email, phone: u.phone,
-      fundBal: u.fundBal, tradeBal: u.tradeBal, earnings: u.earnings,
-      withdrawn: u.withdrawn, kycStatus: u.kycStatus, tier: u.tier,
-    });
+    await updateAdminUser(u.id, { name: u.name, email: u.email, phone: u.phone, fundBal: u.fundBal, tradeBal: u.tradeBal, earnings: u.earnings, withdrawn: u.withdrawn, kycStatus: u.kycStatus, tier: u.tier });
     setUsers(p => p.map(x => x.id === u.id ? { ...x, ...u } : x));
   };
 
@@ -797,7 +627,6 @@ export default function AdminPanel({ onExit, role }) {
     setGBusy(false);
   };
 
-  // ── Dashboard stats ──────────────────────────────────────────────────────────
   const STATS_MAIN = [
     { icon: "👥", label: "Total Users",  value: users.length || "—" },
     { icon: "✅", label: "KYC Verified", value: users.filter(u => u.kycStatus === "approved").length || 0 },
@@ -822,14 +651,46 @@ export default function AdminPanel({ onExit, role }) {
     return `${base}${p.startsWith("/") ? "" : "/"}${p}`;
   };
 
-  // ── PageInfo helper ─────────────────────────────────────────────────────────
+  // ── Notify User filtered results ───────────────────────────────────────────
+  const notifyResults = useMemo(() => {
+    if (!notifySearch.trim()) return [];
+    const qq = notifySearch.toLowerCase();
+    return users.filter(u =>
+      u.name?.toLowerCase().includes(qq) ||
+      u.email?.toLowerCase().includes(qq) ||
+      u.phone?.toLowerCase().includes(qq) ||
+      u.uid?.toLowerCase().includes(qq)
+    ).slice(0, 10);
+  }, [users, notifySearch]);
+
+  const handleNotifyReset = () => {
+    setNotifySelected(null);
+    setNotifySearch("");
+    setNotifyTitle("");
+    setNotifyBody("");
+  };
+
+  const handleNotifySend = async () => {
+    if (!notifySelected?.id) { addToast("No user selected", "err"); return; }
+    if (!notifyTitle.trim())  { addToast("Title is required", "err"); return; }
+    if (!notifyBody.trim())   { addToast("Message is required", "err"); return; }
+    setNotifySending(true);
+    const ok = await sendNotifToUser(notifySelected.id, notifyTitle.trim(), notifyBody.trim());
+    if (ok) {
+      addToast(`Notification sent to ${notifySelected.name} ✅`, "ok");
+      handleNotifyReset();
+    } else {
+      addToast("Failed to send notification — check console", "err");
+    }
+    setNotifySending(false);
+  };
+
   const PageInfo = ({ total, pag }) => (
     <div style={{ fontSize: 11, color: "var(--t3)", marginBottom: 6 }}>
       Showing {Math.min((pag.page - 1) * PAGE_SIZE + 1, total)}–{Math.min(pag.page * PAGE_SIZE, total)} of {total}
     </div>
   );
 
-  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <>
       {previewImage && (
@@ -892,28 +753,15 @@ export default function AdminPanel({ onExit, role }) {
                 <span style={{ fontSize: 12, color: "var(--t3)" }}>
                   {fu.length} user{fu.length !== 1 ? "s" : ""}
                   {isMain && users.filter(u => u.isHidden).length > 0 && (
-                    <span style={{ marginLeft: 8, fontSize: 10, color: "var(--dn)", fontWeight: 700 }}>
-                      ({users.filter(u => u.isHidden).length} hidden from Admin)
-                    </span>
+                    <span style={{ marginLeft: 8, fontSize: 10, color: "var(--dn)", fontWeight: 700 }}>({users.filter(u => u.isHidden).length} hidden from Admin)</span>
                   )}
                 </span>
                 <button onClick={refresh} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄</button>
               </div>
-
-              {/* Enhanced search: name, email, phone, UID */}
               <SearchBar onSearch={v => { setUQ(v); }} placeholder="Search name, email, phone or UID..."/>
-
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading users...</div>}
               {!loading && fu.length === 0 && <div className="empty"><div className="ei">👥</div><p style={{ fontSize: 13 }}>No users found</p></div>}
-
-              {/* Top pagination */}
-              {!loading && fu.length > 0 && (
-                <>
-                  <PageInfo total={fu.length} pag={usersPag}/>
-                  <Pagination page={usersPag.page} totalPages={usersPag.totalPages} onPage={usersPag.setPage}/>
-                </>
-              )}
-
+              {!loading && fu.length > 0 && (<><PageInfo total={fu.length} pag={usersPag}/><Pagination page={usersPag.page} totalPages={usersPag.totalPages} onPage={usersPag.setPage}/></>)}
               {usersPag.slice.map(u => (
                 <div key={u.id} className="card" style={{ padding: 14, marginBottom: 10 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -923,9 +771,7 @@ export default function AdminPanel({ onExit, role }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                         <span style={{ fontWeight: 700, fontSize: 13 }}>{u.name}</span>
-                        {isMain && u.isHidden && (
-                          <span style={{ fontSize: 9, fontWeight: 700, background: "rgba(255,59,92,.15)", color: "var(--dn)", border: "1px solid rgba(255,59,92,.3)", borderRadius: 4, padding: "2px 5px" }}>HIDDEN</span>
-                        )}
+                        {isMain && u.isHidden && (<span style={{ fontSize: 9, fontWeight: 700, background: "rgba(255,59,92,.15)", color: "var(--dn)", border: "1px solid rgba(255,59,92,.3)", borderRadius: 4, padding: "2px 5px" }}>HIDDEN</span>)}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
                       <div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)" }}>{u.phone || ""}{u.phone ? " · " : ""}{u.joined}</div>
@@ -934,17 +780,11 @@ export default function AdminPanel({ onExit, role }) {
                       <span className="badge b-au" style={{ fontSize: 9 }}>{u.tier || "No Tier"}</span>
                       {(() => { const lv = getRefLevel(u.referralCount ?? 0); return lv.level > 0 ? <span style={{ display: "inline-flex", background: lv.color + "18", border: "1px solid " + lv.color + "40", borderRadius: 20, padding: "2px 7px", fontSize: 9, fontWeight: 900, fontFamily: "var(--m)", color: lv.color }}>★ {lv.label}</span> : null; })()}
                       <SB s={u.kycStatus ?? "none"}/>
-                      {/* ✓ Deposited badge — true when user has any balance/earnings (proxy for approved deposit) */}
                       {(u.hasDeposit || (u.fundBal > 0) || (u.tradeBal > 0) || (u.earnings > 0) || (u.withdrawn > 0)) && <DepositedBadge/>}
                     </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 8 }}>
-                    {[
-                      ["Funding",   "$" + (u.fundBal   ?? 0).toFixed(0), "var(--blue)"],
-                      ["Trading",   "$" + (u.tradeBal  ?? 0).toFixed(0), "var(--up)"],
-                      ["Earned",    "$" + (u.earnings  ?? 0).toFixed(0), "var(--gold)"],
-                      ["Withdrawn", "$" + (u.withdrawn ?? 0).toFixed(0), "var(--dn)"],
-                    ].map(([l, v, c]) => (
+                    {[["Funding","$"+(u.fundBal??0).toFixed(0),"var(--blue)"],["Trading","$"+(u.tradeBal??0).toFixed(0),"var(--up)"],["Earned","$"+(u.earnings??0).toFixed(0),"var(--gold)"],["Withdrawn","$"+(u.withdrawn??0).toFixed(0),"var(--dn)"]].map(([l,v,c]) => (
                       <div key={l} style={{ background: "var(--ink2)", borderRadius: 8, padding: "8px 10px" }}>
                         <div style={{ fontSize: 9, color: "var(--t3)", fontFamily: "var(--m)", marginBottom: 2 }}>{l}</div>
                         <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "var(--m)", color: c }}>{v}</div>
@@ -968,11 +808,7 @@ export default function AdminPanel({ onExit, role }) {
                   )}
                 </div>
               ))}
-
-              {/* Bottom pagination */}
-              {!loading && fu.length > 0 && (
-                <Pagination page={usersPag.page} totalPages={usersPag.totalPages} onPage={usersPag.setPage}/>
-              )}
+              {!loading && fu.length > 0 && (<Pagination page={usersPag.page} totalPages={usersPag.totalPages} onPage={usersPag.setPage}/>)}
             </div>
           )}
 
@@ -981,19 +817,11 @@ export default function AdminPanel({ onExit, role }) {
             <div>
               <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>🌐 My Team Lookup</div>
               <div style={{ background: "var(--ink3)", border: "1px solid var(--ln)", borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 12, color: "var(--t3)", lineHeight: 1.7 }}>
-                Search any user to view their <strong style={{ color: "var(--gold)" }}>My Referrals</strong> (direct, deposited) and <strong style={{ color: "var(--blue)" }}>My Team</strong> (downline deposits). Chain breaks if a middle person has no deposit.
+                Search any user to view their <strong style={{ color: "var(--gold)" }}>My Referrals</strong> (direct, deposited) and <strong style={{ color: "var(--blue)" }}>My Team</strong> (downline deposits).
               </div>
-
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                 <div className="iw" style={{ flex: 1, marginBottom: 0 }}>
-                  <input
-                    className="inp"
-                    placeholder="Search by name, email or UID..."
-                    value={teamSearch}
-                    onChange={e => setTeamSearch(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") doTeamSearch(); }}
-                    style={{ paddingLeft: 40, fontSize: 13 }}
-                  />
+                  <input className="inp" placeholder="Search by name, email or UID..." value={teamSearch} onChange={e => setTeamSearch(e.target.value)} onKeyDown={e => { if (e.key === "Enter") doTeamSearch(); }} style={{ paddingLeft: 40, fontSize: 13 }}/>
                   <div style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "var(--t3)", pointerEvents: "none" }}>
                     <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   </div>
@@ -1002,22 +830,16 @@ export default function AdminPanel({ onExit, role }) {
                   {teamLoading ? "..." : "Search"}
                 </button>
               </div>
-
               {users.length === 0 && (
                 <div style={{ background: "rgba(240,165,0,.06)", border: "1px solid rgba(240,165,0,.2)", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "var(--t2)", marginBottom: 12 }}>
-                  ⚠️ Users list is empty. Visit the <strong style={{ color: "var(--gold)" }}>Users</strong> tab first so the search can find users.
+                  ⚠️ Users list is empty. Visit the <strong style={{ color: "var(--gold)" }}>Users</strong> tab first.
                 </div>
               )}
-
               {teamResult?.error && (
-                <div style={{ background: "rgba(255,59,92,.08)", border: "1px solid rgba(255,59,92,.2)", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "var(--dn)" }}>
-                  ❌ {teamResult.error}
-                </div>
+                <div style={{ background: "rgba(255,59,92,.08)", border: "1px solid rgba(255,59,92,.2)", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "var(--dn)" }}>❌ {teamResult.error}</div>
               )}
-
               {teamResult && !teamResult.error && (
                 <div>
-                  {/* Searched user card */}
                   <div style={{ background: "var(--ink3)", border: "1px solid var(--ln2)", borderRadius: 14, padding: "14px 16px", marginBottom: 16 }}>
                     <div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)", marginBottom: 8, letterSpacing: 1 }}>SEARCHED USER</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1027,9 +849,7 @@ export default function AdminPanel({ onExit, role }) {
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: 14 }}>{teamResult.user?.name || teamResult.searchedUser?.name}</div>
                         <div style={{ fontSize: 11, color: "var(--t2)" }}>{teamResult.user?.email || teamResult.searchedUser?.email}</div>
-                        <div style={{ fontSize: 10, color: "var(--gold)", fontFamily: "var(--m)", fontWeight: 700, marginTop: 2, letterSpacing: 1 }}>
-                          UID: OCT{String(teamResult.user?.id || "").slice(-6).toUpperCase()}
-                        </div>
+                        <div style={{ fontSize: 10, color: "var(--gold)", fontFamily: "var(--m)", fontWeight: 700, marginTop: 2, letterSpacing: 1 }}>UID: OCT{String(teamResult.user?.id || "").slice(-6).toUpperCase()}</div>
                       </div>
                       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                         <div style={{ textAlign: "center", background: "rgba(0,200,150,.1)", border: "1px solid rgba(0,200,150,.2)", borderRadius: 10, padding: "8px 14px" }}>
@@ -1043,120 +863,64 @@ export default function AdminPanel({ onExit, role }) {
                       </div>
                     </div>
                   </div>
-
-                  {/* Tabs */}
                   <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                    {[
-                      ["referrals", `👥 My Referrals (${teamResult.myReferrals?.total || 0})`, "var(--up)"],
-                      ["team",      `🌐 My Team (${teamResult.myTeam?.total || 0})`,            "var(--blue)"],
-                    ].map(([id, label, color]) => (
+                    {[["referrals",`👥 My Referrals (${teamResult.myReferrals?.total || 0})`,"var(--up)"],["team",`🌐 My Team (${teamResult.myTeam?.total || 0})`,"var(--blue)"]].map(([id, label, color]) => (
                       <button key={id} onClick={() => { setTeamTab(id); setTeamMemberQ(""); }}
                         style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: `1.5px solid ${teamTab === id ? color : "var(--ln)"}`, background: teamTab === id ? color + "18" : "var(--ink3)", color: teamTab === id ? color : "var(--t2)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
                         {label}
                       </button>
                     ))}
                   </div>
-
-                  {/* Filter inside results */}
                   <div className="iw" style={{ marginBottom: 14 }}>
-                    <input
-                      className="inp"
-                      placeholder="Filter by name, email or UID..."
-                      value={teamMemberQ}
-                      onChange={e => setTeamMemberQ(e.target.value)}
-                      style={{ paddingLeft: 40, fontSize: 13 }}
-                    />
+                    <input className="inp" placeholder="Filter by name, email or UID..." value={teamMemberQ} onChange={e => setTeamMemberQ(e.target.value)} style={{ paddingLeft: 40, fontSize: 13 }}/>
                     <div style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "var(--t3)", pointerEvents: "none" }}>
                       <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     </div>
                   </div>
-
-                  {/* ── My Referrals list ── */}
                   {teamTab === "referrals" && (
                     <div>
-                      {(teamResult.myReferrals?.members || []).length === 0 && (
-                        <div className="empty">
-                          <div className="ei">👥</div>
-                          <p style={{ fontSize: 13 }}>No qualified referrals yet<br/><span style={{ fontSize: 11, color: "var(--t3)" }}>A referral must make an approved deposit to appear here</span></p>
-                        </div>
-                      )}
-                      {(teamResult.myReferrals?.members || [])
-                        .filter(m => !teamMemberQ ||
-                          m.name?.toLowerCase().includes(teamMemberQ.toLowerCase()) ||
-                          m.email?.toLowerCase().includes(teamMemberQ.toLowerCase()) ||
-                          m.uid?.toLowerCase().includes(teamMemberQ.toLowerCase())
-                        )
-                        .map(m => (
-                          <div key={String(m.id)} style={{ background: "var(--ink3)", border: "1px solid var(--ln)", borderRadius: 12, padding: "12px 14px", marginBottom: 8 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <div style={{ width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg,var(--blue),#1a6fa8)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 900, fontSize: 12, flexShrink: 0 }}>
-                                {(m.name || "?")[0].toUpperCase()}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: 700, fontSize: 13 }}>{m.name}</div>
-                                <div style={{ fontSize: 11, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email}</div>
-                                <div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)", marginTop: 2 }}>
-                                  {m.uid} · Joined {m.joined}
-                                </div>
-                                {m.referredBy && (
-                                  <div style={{ fontSize: 10, color: "var(--blue)", fontFamily: "var(--m)", marginTop: 2 }}>
-                                    👤 Ref by: <strong>{m.referredBy}</strong>
-                                  </div>
-                                )}
-                              </div>
-                              <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
-                                <span className="badge b-au" style={{ fontSize: 9 }}>{m.tier}</span>
-                                <SB s={m.kycStatus}/>
-                                <DepositedBadge/>
-                              </div>
+                      {(teamResult.myReferrals?.members || []).length === 0 && (<div className="empty"><div className="ei">👥</div><p style={{ fontSize: 13 }}>No qualified referrals yet</p></div>)}
+                      {(teamResult.myReferrals?.members || []).filter(m => !teamMemberQ || m.name?.toLowerCase().includes(teamMemberQ.toLowerCase()) || m.email?.toLowerCase().includes(teamMemberQ.toLowerCase()) || m.uid?.toLowerCase().includes(teamMemberQ.toLowerCase())).map(m => (
+                        <div key={String(m.id)} style={{ background: "var(--ink3)", border: "1px solid var(--ln)", borderRadius: 12, padding: "12px 14px", marginBottom: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg,var(--blue),#1a6fa8)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 900, fontSize: 12, flexShrink: 0 }}>{(m.name || "?")[0].toUpperCase()}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: 13 }}>{m.name}</div>
+                              <div style={{ fontSize: 11, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email}</div>
+                              <div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)", marginTop: 2 }}>{m.uid} · Joined {m.joined}</div>
+                              {m.referredBy && (<div style={{ fontSize: 10, color: "var(--blue)", fontFamily: "var(--m)", marginTop: 2 }}>👤 Ref by: <strong>{m.referredBy}</strong></div>)}
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
+                              <span className="badge b-au" style={{ fontSize: 9 }}>{m.tier}</span>
+                              <SB s={m.kycStatus}/>
+                              <DepositedBadge/>
                             </div>
                           </div>
-                        ))}
+                        </div>
+                      ))}
                     </div>
                   )}
-
-                  {/* ── My Team list ── */}
                   {teamTab === "team" && (
                     <div>
-                      {(teamResult.myTeam?.members || []).length === 0 && (
-                        <div className="empty">
-                          <div className="ei">🌐</div>
-                          <p style={{ fontSize: 13 }}>No team members yet<br/><span style={{ fontSize: 11, color: "var(--t3)" }}>Team = your referrals&apos; referrals (and deeper), all must have deposited</span></p>
-                        </div>
-                      )}
-                      {(teamResult.myTeam?.members || [])
-                        .filter(m => !teamMemberQ ||
-                          m.name?.toLowerCase().includes(teamMemberQ.toLowerCase()) ||
-                          m.email?.toLowerCase().includes(teamMemberQ.toLowerCase()) ||
-                          m.uid?.toLowerCase().includes(teamMemberQ.toLowerCase())
-                        )
-                        .map(m => (
-                          <div key={String(m.id)} style={{ background: "var(--ink3)", border: "1px solid var(--ln)", borderRadius: 12, padding: "12px 14px", marginBottom: 8 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <div style={{ width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg,var(--up),#009966)", display: "flex", alignItems: "center", justifyContent: "center", color: "#000", fontWeight: 900, fontSize: 12, flexShrink: 0 }}>
-                                {(m.name || "?")[0].toUpperCase()}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: 700, fontSize: 13 }}>{m.name}</div>
-                                <div style={{ fontSize: 11, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email}</div>
-                                <div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)", marginTop: 2 }}>
-                                  {m.uid} · Joined {m.joined}
-                                </div>
-                                {/* ── FIXED: Ref by now shown in My Team too ── */}
-                                {m.referredBy && (
-                                  <div style={{ fontSize: 10, color: "var(--blue)", fontFamily: "var(--m)", marginTop: 2 }}>
-                                    👤 Ref by: <strong>{m.referredBy}</strong>
-                                  </div>
-                                )}
-                              </div>
-                              <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
-                                <span className="badge b-au" style={{ fontSize: 9 }}>{m.tier}</span>
-                                <SB s={m.kycStatus}/>
-                                <DepositedBadge/>
-                              </div>
+                      {(teamResult.myTeam?.members || []).length === 0 && (<div className="empty"><div className="ei">🌐</div><p style={{ fontSize: 13 }}>No team members yet</p></div>)}
+                      {(teamResult.myTeam?.members || []).filter(m => !teamMemberQ || m.name?.toLowerCase().includes(teamMemberQ.toLowerCase()) || m.email?.toLowerCase().includes(teamMemberQ.toLowerCase()) || m.uid?.toLowerCase().includes(teamMemberQ.toLowerCase())).map(m => (
+                        <div key={String(m.id)} style={{ background: "var(--ink3)", border: "1px solid var(--ln)", borderRadius: 12, padding: "12px 14px", marginBottom: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg,var(--up),#009966)", display: "flex", alignItems: "center", justifyContent: "center", color: "#000", fontWeight: 900, fontSize: 12, flexShrink: 0 }}>{(m.name || "?")[0].toUpperCase()}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: 13 }}>{m.name}</div>
+                              <div style={{ fontSize: 11, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email}</div>
+                              <div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)", marginTop: 2 }}>{m.uid} · Joined {m.joined}</div>
+                              {m.referredBy && (<div style={{ fontSize: 10, color: "var(--blue)", fontFamily: "var(--m)", marginTop: 2 }}>👤 Ref by: <strong>{m.referredBy}</strong></div>)}
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
+                              <span className="badge b-au" style={{ fontSize: 9 }}>{m.tier}</span>
+                              <SB s={m.kycStatus}/>
+                              <DepositedBadge/>
                             </div>
                           </div>
-                        ))}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1172,17 +936,11 @@ export default function AdminPanel({ onExit, role }) {
                 <div style={{ marginBottom: 14 }}>
                   <div className="lbl" style={{ marginBottom: 8 }}>Trading Pair</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-                    {PAIRS.map(p => (
-                      <button key={p} onClick={() => setSelPair(p)} style={{ padding: "6px 11px", borderRadius: 8, border: selPair === p ? "1.5px solid var(--gold)" : "1px solid var(--ln)", background: selPair === p ? "rgba(240,165,0,.1)" : "var(--ink2)", color: selPair === p ? "var(--gold)" : "var(--t2)", fontFamily: "var(--m)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{p}</button>
-                    ))}
+                    {PAIRS.map(p => (<button key={p} onClick={() => setSelPair(p)} style={{ padding: "6px 11px", borderRadius: 8, border: selPair === p ? "1.5px solid var(--gold)" : "1px solid var(--ln)", background: selPair === p ? "rgba(240,165,0,.1)" : "var(--ink2)", color: selPair === p ? "var(--gold)" : "var(--t2)", fontFamily: "var(--m)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{p}</button>))}
                   </div>
                   <div className="lbl" style={{ marginBottom: 8 }}>Direction</div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    {["BUY", "SELL"].map(s => (
-                      <button key={s} onClick={() => setSelSide(s)} style={{ padding: "10px 0", borderRadius: 10, border: `2px solid ${selSide === s ? (s === "BUY" ? "var(--up)" : "var(--dn)") : "var(--ln)"}`, background: selSide === s ? (s === "BUY" ? "rgba(0,200,150,.12)" : "rgba(255,59,92,.12)") : "var(--ink2)", color: selSide === s ? (s === "BUY" ? "var(--up)" : "var(--dn)") : "var(--t2)", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
-                        {s === "BUY" ? "▲ BUY" : "▼ SELL"}
-                      </button>
-                    ))}
+                    {["BUY", "SELL"].map(s => (<button key={s} onClick={() => setSelSide(s)} style={{ padding: "10px 0", borderRadius: 10, border: `2px solid ${selSide === s ? (s === "BUY" ? "var(--up)" : "var(--dn)") : "var(--ln)"}`, background: selSide === s ? (s === "BUY" ? "rgba(0,200,150,.12)" : "rgba(255,59,92,.12)") : "var(--ink2)", color: selSide === s ? (s === "BUY" ? "var(--up)" : "var(--dn)") : "var(--t2)", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>{s === "BUY" ? "▲ BUY" : "▼ SELL"}</button>))}
                   </div>
                 </div>
                 {gCode && (
@@ -1194,9 +952,7 @@ export default function AdminPanel({ onExit, role }) {
                     <button className="btn btn-outline btn-sm" onClick={() => { navigator.clipboard?.writeText(gCode); addToast("Copied!", "ok"); }}>📋 Copy</button>
                   </div>
                 )}
-                <button className="btn btn-purple btn-block" onClick={genSig} disabled={gBusy}>
-                  {gBusy ? <><span className="spin spin-w"/>Generating...</> : "⚡ Generate Code"}
-                </button>
+                <button className="btn btn-purple btn-block" onClick={genSig} disabled={gBusy}>{gBusy ? <><span className="spin spin-w"/>Generating...</> : "⚡ Generate Code"}</button>
               </div>
               <div className="card" style={{ padding: 18, marginBottom: 16 }}>
                 <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>🔑 Active Signal Codes</div>
@@ -1250,16 +1006,14 @@ export default function AdminPanel({ onExit, role }) {
           {sec === "price" && isMain && (
             <div>
               <div style={{ background: "rgba(255,59,92,.08)", border: "1px solid rgba(255,59,92,.2)", borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 13, color: "var(--t2)", lineHeight: 1.6 }}>
-                ⚠️ <strong style={{ color: "var(--dn)" }}>Demo Only</strong> — Price manipulation for demonstration purposes. 🔒 Main Admin Only.
+                ⚠️ <strong style={{ color: "var(--dn)" }}>Demo Only</strong> — Price manipulation for demonstration purposes.
               </div>
               <div className="card" style={{ padding: 18, marginBottom: 16 }}>
                 <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>📈 Launch Price Wick</div>
                 <div style={{ marginBottom: 14 }}>
                   <div className="lbl" style={{ marginBottom: 8 }}>Select Coin</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {Object.keys(COINS).map(s => (
-                      <button key={s} onClick={() => setWSym(s)} style={{ padding: "6px 12px", borderRadius: 8, border: wSym === s ? "1.5px solid var(--gold)" : "1px solid var(--ln)", background: wSym === s ? "rgba(240,165,0,.1)" : "var(--ink2)", color: wSym === s ? "var(--gold)" : "var(--t2)", fontFamily: "var(--m)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{s}</button>
-                    ))}
+                    {Object.keys(COINS).map(s => (<button key={s} onClick={() => setWSym(s)} style={{ padding: "6px 12px", borderRadius: 8, border: wSym === s ? "1.5px solid var(--gold)" : "1px solid var(--ln)", background: wSym === s ? "rgba(240,165,0,.1)" : "var(--ink2)", color: wSym === s ? "var(--gold)" : "var(--t2)", fontFamily: "var(--m)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{s}</button>))}
                   </div>
                 </div>
                 <div style={{ background: "var(--ink2)", border: "1px solid var(--ln)", borderRadius: 10, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
@@ -1278,9 +1032,7 @@ export default function AdminPanel({ onExit, role }) {
                 <div className="fg">
                   <label className="lbl">Duration (seconds)</label>
                   <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-                    {["10","30","60","120","300"].map(d => (
-                      <button key={d} onClick={() => setWDur(d)} style={{ padding: "6px 12px", borderRadius: 8, border: wDur === d ? "1.5px solid var(--blue)" : "1px solid var(--ln)", background: wDur === d ? "rgba(45,156,255,.1)" : "var(--ink2)", color: wDur === d ? "var(--blue)" : "var(--t2)", fontFamily: "var(--m)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{d}s</button>
-                    ))}
+                    {["10","30","60","120","300"].map(d => (<button key={d} onClick={() => setWDur(d)} style={{ padding: "6px 12px", borderRadius: 8, border: wDur === d ? "1.5px solid var(--blue)" : "1px solid var(--ln)", background: wDur === d ? "rgba(45,156,255,.1)" : "var(--ink2)", color: wDur === d ? "var(--blue)" : "var(--t2)", fontFamily: "var(--m)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{d}s</button>))}
                   </div>
                   <input className="inp" type="number" value={wDur} onChange={e => setWDur(e.target.value)}/>
                 </div>
@@ -1317,20 +1069,10 @@ export default function AdminPanel({ onExit, role }) {
             <div>
               {isMain && <FilterRow value={depF} onChange={v => { setDepF(v); depsPag.setPage(1); }} onRefresh={refresh} opts={[["pending","⏳ Pending"],["approved","✅ Approved"],["rejected","❌ Rejected"],["all","📋 All History"]]}/>}
               {!isMain && <div style={{ marginBottom: 14, display: "flex", justifyContent: "flex-end" }}><button onClick={refresh} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄 Refresh</button></div>}
-
-              {/* Enhanced search: name, email, phone, UID, TX hash */}
               <SearchBar onSearch={v => { setDQ(v); depsPag.setPage(1); }} placeholder="Search name, email, phone, UID or TX hash..."/>
-
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading deposits...</div>}
               {!loading && fd.length === 0 && <div className="empty"><div className="ei">⬇️</div><p style={{ fontSize: 13 }}>No deposits found</p></div>}
-
-              {!loading && fd.length > 0 && (
-                <>
-                  <PageInfo total={fd.length} pag={depsPag}/>
-                  <Pagination page={depsPag.page} totalPages={depsPag.totalPages} onPage={depsPag.setPage}/>
-                </>
-              )}
-
+              {!loading && fd.length > 0 && (<><PageInfo total={fd.length} pag={depsPag}/><Pagination page={depsPag.page} totalPages={depsPag.totalPages} onPage={depsPag.setPage}/></>)}
               {depsPag.slice.map(d => (
                 <div key={d.id} className="card" style={{ padding: 14, marginBottom: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -1338,7 +1080,6 @@ export default function AdminPanel({ onExit, role }) {
                       <div style={{ fontWeight: 700, fontSize: 14 }}>{d.user}</div>
                       <div style={{ fontSize: 12, color: "var(--t2)", marginTop: 2 }}>{d.tier || "—"} · {d.network}</div>
                       {d.date && <div style={{ fontSize: 10, color: "var(--t3)", marginTop: 2 }}>{d.date}</div>}
-                      {/* UID display in deposit cards */}
                       {d.uid && <div style={{ fontSize: 10, color: "var(--gold)", fontFamily: "var(--m)", fontWeight: 700, marginTop: 2, letterSpacing: 1 }}>UID: {d.uid}</div>}
                     </div>
                     <SB s={d.status}/>
@@ -1360,10 +1101,7 @@ export default function AdminPanel({ onExit, role }) {
                   )}
                 </div>
               ))}
-
-              {!loading && fd.length > 0 && (
-                <Pagination page={depsPag.page} totalPages={depsPag.totalPages} onPage={depsPag.setPage}/>
-              )}
+              {!loading && fd.length > 0 && (<Pagination page={depsPag.page} totalPages={depsPag.totalPages} onPage={depsPag.setPage}/>)}
             </div>
           )}
 
@@ -1372,20 +1110,10 @@ export default function AdminPanel({ onExit, role }) {
             <div>
               {isMain && <FilterRow value={wdF} onChange={v => { setWdF(v); wdsPag.setPage(1); }} onRefresh={refresh} opts={[["pending","⏳ Pending"],["approved","✅ Approved"],["rejected","❌ Rejected"],["all","📋 All History"]]}/>}
               {!isMain && <div style={{ marginBottom: 14, display: "flex", justifyContent: "flex-end" }}><button onClick={refresh} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄 Refresh</button></div>}
-
-              {/* Enhanced search: name, email, phone, UID, wallet */}
               <SearchBar onSearch={v => { setWQ(v); wdsPag.setPage(1); }} placeholder="Search name, email, phone, UID or wallet address..."/>
-
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading withdrawals...</div>}
               {!loading && fw.length === 0 && <div className="empty"><div className="ei">⬆️</div><p style={{ fontSize: 13 }}>No withdrawals found</p></div>}
-
-              {!loading && fw.length > 0 && (
-                <>
-                  <PageInfo total={fw.length} pag={wdsPag}/>
-                  <Pagination page={wdsPag.page} totalPages={wdsPag.totalPages} onPage={wdsPag.setPage}/>
-                </>
-              )}
-
+              {!loading && fw.length > 0 && (<><PageInfo total={fw.length} pag={wdsPag}/><Pagination page={wdsPag.page} totalPages={wdsPag.totalPages} onPage={wdsPag.setPage}/></>)}
               {wdsPag.slice.map(w => (
                 <div key={w.id} className="card" style={{ padding: 14, marginBottom: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -1393,7 +1121,6 @@ export default function AdminPanel({ onExit, role }) {
                       <div style={{ fontWeight: 700, fontSize: 14 }}>{w.user}</div>
                       <div style={{ fontSize: 12, color: "var(--t2)", marginTop: 2 }}>{w.network}</div>
                       {w.date && <div style={{ fontSize: 10, color: "var(--t3)", marginTop: 2 }}>{w.date}</div>}
-                      {/* UID display in withdrawal cards */}
                       {w.uid && <div style={{ fontSize: 10, color: "var(--gold)", fontFamily: "var(--m)", fontWeight: 700, marginTop: 2, letterSpacing: 1 }}>UID: {w.uid}</div>}
                     </div>
                     <SB s={w.status}/>
@@ -1415,39 +1142,19 @@ export default function AdminPanel({ onExit, role }) {
                   )}
                 </div>
               ))}
-
-              {!loading && fw.length > 0 && (
-                <Pagination page={wdsPag.page} totalPages={wdsPag.totalPages} onPage={wdsPag.setPage}/>
-              )}
+              {!loading && fw.length > 0 && (<Pagination page={wdsPag.page} totalPages={wdsPag.totalPages} onPage={wdsPag.setPage}/>)}
             </div>
           )}
 
           {/* ── KYC ───────────────────────────────────────────────────────── */}
           {sec === "kyc" && (
             <div>
-              <FilterRow
-                value={kycF}
-                onChange={v => { setKycF(v); kycPag.setPage(1); }}
-                onRefresh={refresh}
-                opts={isMain
-                  ? [["pending","⏳ Pending"],["approved","✅ Approved"],["rejected","❌ Rejected"],["all","📋 All"]]
-                  : [["pending","⏳ Pending"]]
-                }
-              />
-
-              {/* Enhanced search: name, email, phone, UID */}
+              <FilterRow value={kycF} onChange={v => { setKycF(v); kycPag.setPage(1); }} onRefresh={refresh}
+                opts={isMain ? [["pending","⏳ Pending"],["approved","✅ Approved"],["rejected","❌ Rejected"],["all","📋 All"]] : [["pending","⏳ Pending"]]}/>
               <SearchBar onSearch={v => { setKQ(v); kycPag.setPage(1); }} placeholder="Search name, email, phone or UID..."/>
-
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading KYC...</div>}
               {!loading && fk.length === 0 && <div className="empty"><div className="ei">🪪</div><p style={{ fontSize: 13 }}>No KYC requests found</p></div>}
-
-              {!loading && fk.length > 0 && (
-                <>
-                  <PageInfo total={fk.length} pag={kycPag}/>
-                  <Pagination page={kycPag.page} totalPages={kycPag.totalPages} onPage={kycPag.setPage}/>
-                </>
-              )}
-
+              {!loading && fk.length > 0 && (<><PageInfo total={fk.length} pag={kycPag}/><Pagination page={kycPag.page} totalPages={kycPag.totalPages} onPage={kycPag.setPage}/></>)}
               {kycPag.slice.map(k => (
                 <div key={k.id} className="card" style={{ padding: 14, marginBottom: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -1466,12 +1173,8 @@ export default function AdminPanel({ onExit, role }) {
                         const full = imgUrl(url);
                         return (
                           <div key={label} style={{ background: "var(--ink2)", border: "1px solid var(--ln2)", borderRadius: 10, overflow: "hidden" }}>
-                            {full
-                              ? <button onClick={() => setPreviewImage(full)} style={{ all: "unset", cursor: "pointer", display: "block", width: "100%" }}>
-                                  <img src={full} alt={label} style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }}/>
-                                </button>
-                              : <div style={{ height: 100, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 24 }}>🪪</span></div>
-                            }
+                            {full ? <button onClick={() => setPreviewImage(full)} style={{ all: "unset", cursor: "pointer", display: "block", width: "100%" }}><img src={full} alt={label} style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }}/></button>
+                              : <div style={{ height: 100, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 24 }}>🪪</span></div>}
                             <div style={{ padding: "5px 8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                               <span style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)", fontWeight: 700 }}>{label}</span>
                               {full && <button onClick={() => setPreviewImage(full)} style={{ all: "unset", cursor: "pointer", fontSize: 10, color: "var(--blue)", textDecoration: "underline", fontWeight: 700 }}>View</button>}
@@ -1489,10 +1192,7 @@ export default function AdminPanel({ onExit, role }) {
                   )}
                 </div>
               ))}
-
-              {!loading && fk.length > 0 && (
-                <Pagination page={kycPag.page} totalPages={kycPag.totalPages} onPage={kycPag.setPage}/>
-              )}
+              {!loading && fk.length > 0 && (<Pagination page={kycPag.page} totalPages={kycPag.totalPages} onPage={kycPag.setPage}/>)}
             </div>
           )}
 
@@ -1506,9 +1206,7 @@ export default function AdminPanel({ onExit, role }) {
                 <div className="fg">
                   <label className="lbl">Color</label>
                   <div style={{ display: "flex", gap: 8 }}>
-                    {["#f0a500","#00c896","#2d9cff","#a855f7","#ff3b5c"].map(c => (
-                      <button key={c} onClick={() => setNb(p => ({ ...p, color: c }))} style={{ width: 28, height: 28, borderRadius: "50%", background: c, border: nb.color === c ? "3px solid #fff" : "2px solid transparent", cursor: "pointer" }}/>
-                    ))}
+                    {["#f0a500","#00c896","#2d9cff","#a855f7","#ff3b5c"].map(c => (<button key={c} onClick={() => setNb(p => ({ ...p, color: c }))} style={{ width: 28, height: 28, borderRadius: "50%", background: c, border: nb.color === c ? "3px solid #fff" : "2px solid transparent", cursor: "pointer" }}/>))}
                   </div>
                 </div>
                 <button className="btn btn-gold btn-sm" onClick={() => {
@@ -1533,7 +1231,7 @@ export default function AdminPanel({ onExit, role }) {
             </div>
           )}
 
-          {/* ── NOTIFS ────────────────────────────────────────────────────── */}
+          {/* ── NOTIFS (Broadcast) ────────────────────────────────────────── */}
           {sec === "notifs" && isMain && (
             <div>
               <div className="card" style={{ padding: 16, marginBottom: 16 }}>
@@ -1547,6 +1245,194 @@ export default function AdminPanel({ onExit, role }) {
                   setNf({ title: "", body: "" });
                 }}>Send to All Users</button>
               </div>
+            </div>
+          )}
+
+          {/* ── NOTIFY USER ───────────────────────────────────────────────── */}
+          {sec === "notify" && isMain && (
+            <div>
+              {/* Header */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>📨 Notify User</div>
+                <div style={{ fontSize: 12, color: "var(--t3)" }}>
+                  Search a user by name, email, phone or UID — select them and send a notification.
+                </div>
+              </div>
+
+              {/* Users not loaded warning */}
+              {users.length === 0 && (
+                <div style={{ background: "rgba(240,165,0,.06)", border: "1px solid rgba(240,165,0,.25)", borderRadius: 12, padding: "12px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 12, color: "var(--t2)" }}>
+                    {notifyLoading ? "⏳ Loading users..." : "⚠️ No users loaded yet."}
+                  </span>
+                  {!notifyLoading && (
+                    <button className="btn btn-outline btn-sm" onClick={loadUsersForNotify}>
+                      Load Users
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Search — only show when no user is selected yet */}
+              {!notifySelected && (
+                <>
+                  <SearchBar
+                    value={notifySearch}
+                    onSearch={v => setNotifySearch(v)}
+                    placeholder="Search by name, email, phone or UID..."
+                  />
+
+                  {/* Results list */}
+                  {notifySearch.trim().length > 0 && (
+                    <div style={{ marginBottom: 14 }}>
+                      {notifyResults.length === 0 ? (
+                        <div style={{ background: "var(--ink3)", border: "1px solid var(--ln)", borderRadius: 12, padding: "16px 14px", textAlign: "center" }}>
+                          <div style={{ fontSize: 20, marginBottom: 6 }}>🔍</div>
+                          <div style={{ fontSize: 13, color: "var(--t3)" }}>No users found for "{notifySearch}"</div>
+                          {users.length === 0 && (
+                            <div style={{ fontSize: 11, color: "var(--dn)", marginTop: 6 }}>
+                              Users list is empty — click "Load Users" above first.
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        notifyResults.map(u => (
+                          <div
+                            key={u.id}
+                            onClick={() => { setNotifySelected(u); setNotifySearch(""); }}
+                            style={{
+                              background: "var(--ink3)",
+                              border: "1px solid var(--ln)",
+                              borderRadius: 12,
+                              padding: "12px 14px",
+                              marginBottom: 8,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              transition: "border-color .15s, background .15s",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--gold)"; e.currentTarget.style.background = "rgba(240,165,0,.04)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--ln)"; e.currentTarget.style.background = "var(--ink3)"; }}
+                          >
+                            {/* Avatar */}
+                            <div style={{ width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg,var(--gold),#c07800)", display: "flex", alignItems: "center", justifyContent: "center", color: "#000", fontWeight: 900, fontSize: 14, flexShrink: 0 }}>
+                              {(u.name || "?")[0].toUpperCase()}
+                            </div>
+                            {/* Info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: 13 }}>{u.name}</div>
+                              <div style={{ fontSize: 11, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+                              <div style={{ display: "flex", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 10, color: "var(--gold)", fontFamily: "var(--m)", fontWeight: 700 }}>{u.uid}</span>
+                                {u.phone && <span style={{ fontSize: 10, color: "var(--t3)" }}>{u.phone}</span>}
+                                <span className="badge b-au" style={{ fontSize: 9 }}>{u.tier || "No Tier"}</span>
+                                <SB s={u.kycStatus || "none"}/>
+                              </div>
+                            </div>
+                            {/* Select caret */}
+                            <div style={{ fontSize: 11, color: "var(--blue)", fontWeight: 700, flexShrink: 0 }}>
+                              Select →
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Selected user chip */}
+              {notifySelected && (
+                <div style={{ background: "rgba(240,165,0,.07)", border: "1.5px solid rgba(240,165,0,.3)", borderRadius: 14, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 11, background: "linear-gradient(135deg,var(--gold),#c07800)", display: "flex", alignItems: "center", justifyContent: "center", color: "#000", fontWeight: 900, fontSize: 16, flexShrink: 0 }}>
+                    {(notifySelected.name || "?")[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{notifySelected.name}</div>
+                    <div style={{ fontSize: 11, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{notifySelected.email}</div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 10, color: "var(--gold)", fontFamily: "var(--m)", fontWeight: 700 }}>{notifySelected.uid}</span>
+                      {notifySelected.phone && <span style={{ fontSize: 10, color: "var(--t3)" }}>{notifySelected.phone}</span>}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleNotifyReset}
+                    title="Change user"
+                    style={{ background: "none", border: "1px solid var(--ln)", borderRadius: 8, color: "var(--t3)", fontSize: 16, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Message form — only shown when a user is selected */}
+              {notifySelected && (
+                <div className="card" style={{ padding: 18 }}>
+                  <div style={{ fontSize: 11, color: "var(--t3)", fontFamily: "var(--m)", letterSpacing: 1, marginBottom: 14 }}>
+                    COMPOSE NOTIFICATION
+                  </div>
+
+                  <div className="fg">
+                    <label className="lbl">Title</label>
+                    <input
+                      className="inp"
+                      placeholder="e.g. Your withdrawal has been approved"
+                      value={notifyTitle}
+                      onChange={e => setNotifyTitle(e.target.value)}
+                      style={{ fontSize: 14 }}
+                    />
+                  </div>
+
+                  <div className="fg">
+                    <label className="lbl">Message</label>
+                    <textarea
+                      className="inp"
+                      rows={5}
+                      placeholder="Write your message here..."
+                      value={notifyBody}
+                      onChange={e => setNotifyBody(e.target.value)}
+                      style={{ resize: "vertical", minHeight: 110, fontSize: 13, lineHeight: 1.6 }}
+                    />
+                  </div>
+
+                  {/* Character hint */}
+                  <div style={{ fontSize: 10, color: "var(--t3)", marginTop: -8, marginBottom: 14, textAlign: "right" }}>
+                    {notifyBody.length} characters
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ flex: 1 }}
+                      onClick={handleNotifyReset}
+                      disabled={notifySending}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn btn-gold"
+                      style={{ flex: 2 }}
+                      disabled={notifySending || !notifyTitle.trim() || !notifyBody.trim()}
+                      onClick={handleNotifySend}
+                    >
+                      {notifySending
+                        ? <><span className="spin spin-w" style={{ marginRight: 6 }}/>Sending...</>
+                        : "📨 Send Notification"
+                      }
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state — no search typed yet */}
+              {!notifySelected && !notifySearch.trim() && users.length > 0 && (
+                <div className="empty" style={{ marginTop: 20 }}>
+                  <div className="ei">📨</div>
+                  <p style={{ fontSize: 13 }}>Search for a user above to get started</p>
+                  <p style={{ fontSize: 11, color: "var(--t3)", marginTop: 4 }}>{users.length} users loaded</p>
+                </div>
+              )}
             </div>
           )}
 

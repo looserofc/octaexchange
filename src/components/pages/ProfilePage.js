@@ -330,6 +330,130 @@ function TeamScreen({ user, onBack }) {
 }
 
 // ─────────────────────────────────────────────────────────
+//  Notification Card — expandable
+// ─────────────────────────────────────────────────────────
+function NotifCard({ n, markRead }) {
+  const [open, setOpen] = useState(false);
+
+  const typeIcon = {
+    deposit:"⬇️", withdrawal:"⬆️", kyc:"🪪", trade:"⚡",
+    referral:"🎁", broadcast:"📢", system:"🔔", admin:"📨",
+  }[n.type] || "🔔";
+
+  return (
+    <>
+      {/* Modal overlay */}
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          style={{
+            position:"fixed", inset:0, background:"rgba(0,0,0,.75)",
+            backdropFilter:"blur(6px)", zIndex:800,
+            display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background:"var(--ink3)", border:"1px solid var(--ln2)",
+              borderRadius:22, padding:24, width:"100%", maxWidth:400,
+              boxShadow:"0 24px 60px rgba(0,0,0,.5)",
+            }}
+          >
+            {/* Modal header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{
+                  width:42, height:42, borderRadius:13,
+                  background:"rgba(240,165,0,.1)", border:"1px solid rgba(240,165,0,.2)",
+                  display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0,
+                }}>
+                  {typeIcon}
+                </div>
+                <div>
+                  <div style={{ fontWeight:800, fontSize:15, lineHeight:1.3 }}>{n.title}</div>
+                  <div style={{ fontSize:11, color:"var(--t3)", fontFamily:"var(--m)", marginTop:2 }}>{n.time}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                style={{
+                  width:30, height:30, borderRadius:8, border:"1px solid var(--ln)",
+                  background:"var(--ink2)", color:"var(--t2)", fontSize:16,
+                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                  flexShrink:0, marginLeft:8, lineHeight:1,
+                }}
+              >✕</button>
+            </div>
+
+            {/* Divider */}
+            <div style={{ height:1, background:"var(--ln)", marginBottom:16 }}/>
+
+            {/* Body */}
+            <div style={{ fontSize:14, color:"var(--t2)", lineHeight:1.8 }}>
+              {n.body}
+            </div>
+
+            {/* Close button */}
+            <button
+              className="btn btn-ghost btn-block"
+              style={{ marginTop:20 }}
+              onClick={() => setOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Notification row */}
+      <div
+        onClick={() => { markRead(n.id); setOpen(true); }}
+        style={{
+          background: n.read ? "var(--ink3)" : "rgba(240,165,0,.05)",
+          border: `1px solid ${n.read ? "var(--ln)" : "rgba(240,165,0,.2)"}`,
+          borderRadius: 14, padding: "13px 14px", marginBottom: 8,
+          cursor: "pointer", transition: "border-color .2s",
+          display:"flex", alignItems:"center", gap:10,
+        }}
+        onMouseEnter={e => e.currentTarget.style.borderColor = "var(--gold)"}
+        onMouseLeave={e => e.currentTarget.style.borderColor = n.read ? "var(--ln)" : "rgba(240,165,0,.2)"}
+      >
+        {/* Icon */}
+        <div style={{
+          width:36, height:36, borderRadius:10, background:"var(--ink2)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize:16, flexShrink:0,
+        }}>
+          {typeIcon}
+        </div>
+
+        {/* Text */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            {!n.read && <div style={{ width:7, height:7, borderRadius:"50%", background:"var(--gold)", flexShrink:0 }}/>}
+            <div style={{ fontWeight:700, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {n.title}
+            </div>
+          </div>
+          <div style={{ fontSize:11, color:"var(--t3)", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {n.body}
+          </div>
+        </div>
+
+        {/* Time + chevron */}
+        <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+          <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", whiteSpace:"nowrap" }}>{n.time}</div>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="var(--t3)" strokeWidth="2.5">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
 //  MAIN ProfilePage
 // ─────────────────────────────────────────────────────────
 export default function ProfilePage() {
@@ -525,15 +649,8 @@ export default function ProfilePage() {
             {notifs.length===0
               ? <div className="empty"><div className="ei">🔔</div><p>No notifications</p></div>
               : notifs.map(n=>(
-                <div key={n.id} onClick={()=>markRead(n.id)} style={{ background:n.read?"var(--ink3)":"rgba(240,165,0,.05)", border:`1px solid ${n.read?"var(--ln)":"rgba(240,165,0,.2)"}`, borderRadius:14, padding:14, marginBottom:8, cursor:"pointer" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                    <div style={{ fontWeight:700, fontSize:13, flex:1 }}>{n.title}</div>
-                    <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", flexShrink:0, marginLeft:8 }}>{n.time}</div>
-                  </div>
-                  <div style={{ fontSize:12, color:"var(--t2)" }}>{n.body}</div>
-                  {!n.read && <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--gold)", marginTop:8 }}/>}
-                </div>
-              ))
+  <NotifCard key={n.id} n={n} markRead={markRead} />
+))
             }
             <div style={{ height:8 }}/>
           </div>

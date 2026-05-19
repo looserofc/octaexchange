@@ -87,7 +87,7 @@ function SearchBar({ value, onSearch, placeholder }) {
       <input
         className="inp"
         placeholder={placeholder ?? "Search..."}
-        value={value ?? undefined}
+        value={value ?? ""}
         onChange={e => onSearch(e.target.value)}
         style={{ paddingLeft: 40, fontSize: 13 }}
       />

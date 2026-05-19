@@ -758,7 +758,7 @@ export default function AdminPanel({ onExit, role }) {
                 </span>
                 <button onClick={refresh} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄</button>
               </div>
-              <SearchBar onSearch={v => { setUQ(v); }} placeholder="Search name, email, phone or UID..."/>
+              <SearchBar value={uQ} onSearch={v => { setUQ(v); }} placeholder="Search name, email, phone or UID..."/>
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading users...</div>}
               {!loading && fu.length === 0 && <div className="empty"><div className="ei">👥</div><p style={{ fontSize: 13 }}>No users found</p></div>}
               {!loading && fu.length > 0 && (<><PageInfo total={fu.length} pag={usersPag}/><Pagination page={usersPag.page} totalPages={usersPag.totalPages} onPage={usersPag.setPage}/></>)}
@@ -1069,7 +1069,7 @@ export default function AdminPanel({ onExit, role }) {
             <div>
               {isMain && <FilterRow value={depF} onChange={v => { setDepF(v); depsPag.setPage(1); }} onRefresh={refresh} opts={[["pending","⏳ Pending"],["approved","✅ Approved"],["rejected","❌ Rejected"],["all","📋 All History"]]}/>}
               {!isMain && <div style={{ marginBottom: 14, display: "flex", justifyContent: "flex-end" }}><button onClick={refresh} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄 Refresh</button></div>}
-              <SearchBar onSearch={v => { setDQ(v); depsPag.setPage(1); }} placeholder="Search name, email, phone, UID or TX hash..."/>
+              <SearchBar value={dQ} onSearch={v => { setDQ(v); depsPag.setPage(1); }} placeholder="Search name, email, phone, UID or TX hash..."/>
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading deposits...</div>}
               {!loading && fd.length === 0 && <div className="empty"><div className="ei">⬇️</div><p style={{ fontSize: 13 }}>No deposits found</p></div>}
               {!loading && fd.length > 0 && (<><PageInfo total={fd.length} pag={depsPag}/><Pagination page={depsPag.page} totalPages={depsPag.totalPages} onPage={depsPag.setPage}/></>)}
@@ -1110,7 +1110,7 @@ export default function AdminPanel({ onExit, role }) {
             <div>
               {isMain && <FilterRow value={wdF} onChange={v => { setWdF(v); wdsPag.setPage(1); }} onRefresh={refresh} opts={[["pending","⏳ Pending"],["approved","✅ Approved"],["rejected","❌ Rejected"],["all","📋 All History"]]}/>}
               {!isMain && <div style={{ marginBottom: 14, display: "flex", justifyContent: "flex-end" }}><button onClick={refresh} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄 Refresh</button></div>}
-              <SearchBar onSearch={v => { setWQ(v); wdsPag.setPage(1); }} placeholder="Search name, email, phone, UID or wallet address..."/>
+              <SearchBar value={wQ} onSearch={v => { setWQ(v); wdsPag.setPage(1); }} placeholder="Search name, email, phone, UID or wallet address..."/>
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading withdrawals...</div>}
               {!loading && fw.length === 0 && <div className="empty"><div className="ei">⬆️</div><p style={{ fontSize: 13 }}>No withdrawals found</p></div>}
               {!loading && fw.length > 0 && (<><PageInfo total={fw.length} pag={wdsPag}/><Pagination page={wdsPag.page} totalPages={wdsPag.totalPages} onPage={wdsPag.setPage}/></>)}
@@ -1151,7 +1151,7 @@ export default function AdminPanel({ onExit, role }) {
             <div>
               <FilterRow value={kycF} onChange={v => { setKycF(v); kycPag.setPage(1); }} onRefresh={refresh}
                 opts={isMain ? [["pending","⏳ Pending"],["approved","✅ Approved"],["rejected","❌ Rejected"],["all","📋 All"]] : [["pending","⏳ Pending"]]}/>
-              <SearchBar onSearch={v => { setKQ(v); kycPag.setPage(1); }} placeholder="Search name, email, phone or UID..."/>
+              <SearchBar value={kQ} onSearch={v => { setKQ(v); kycPag.setPage(1); }} placeholder="Search name, email, phone or UID..."/>
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading KYC...</div>}
               {!loading && fk.length === 0 && <div className="empty"><div className="ei">🪪</div><p style={{ fontSize: 13 }}>No KYC requests found</p></div>}
               {!loading && fk.length > 0 && (<><PageInfo total={fk.length} pag={kycPag}/><Pagination page={kycPag.page} totalPages={kycPag.totalPages} onPage={kycPag.setPage}/></>)}

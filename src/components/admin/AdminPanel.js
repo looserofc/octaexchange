@@ -231,6 +231,7 @@ export default function AdminPanel({ onExit, role }) {
     fetchAdminDeposits, fetchAdminWithdrawals, fetchAdminUsers, fetchAdminDashboard,
     fetchAdminUserTeam,
     updateAdminUser, broadcastNotif, sendNotifToUser, setPriceWick,
+    _adminDashboard, _adminUsers, _adminDeps, _adminWds,
   } = useStore();
 
   const [sec,       setSec]      = useState("dash");
@@ -285,6 +286,18 @@ export default function AdminPanel({ onExit, role }) {
   const userPollRef  = useRef(null);
   const codesPollRef = useRef(null);
 
+  // ── When store cache updates, push data into local state ──────────────────
+  // This runs whenever the background pre-fetch finishes and saves data
+  // to the store cache. It copies that data into local state so the
+  // dashboard and stats show real numbers without clicking any tab.
+  useEffect(() => {
+    if (_adminDashboard && !dashboard) setDashboard(_adminDashboard);
+    if (_adminUsers.length > 0 && users.length === 0) setUsers(_adminUsers);
+    if (_adminDeps.length > 0 && deps.length === 0) setDeps(_adminDeps);
+    if (_adminWds.length > 0 && wds.length === 0) setWds(_adminWds);
+  // eslint-disable-next-line
+  }, [_adminDashboard, _adminUsers, _adminDeps, _adminWds]);
+
   const persistHistory = (history) => {
     try { window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history)); } catch (e) {}
   };
@@ -300,28 +313,36 @@ export default function AdminPanel({ onExit, role }) {
     } catch (e) {}
   }, [isMain]);
 
+  // ── Load everything on mount so dashboard stats are instant ───────────────
   useEffect(() => {
-    load(sec);
-    timerRef.current = setInterval(() => load(sec), 30_000);
+    loadAll();
+    // Refresh everything every 60 seconds
+    timerRef.current = setInterval(loadAll, 60_000);
     return () => clearInterval(timerRef.current);
   // eslint-disable-next-line
-  }, [sec, depF, wdF, kycF]);
+  }, []);
+
+  // ── Reload section data when filter changes ────────────────────────────────
+  useEffect(() => {
+    if (sec === "deps") load("deps");
+  // eslint-disable-next-line
+  }, [depF]);
 
   useEffect(() => {
-    if (sec === "users") {
-      loadUsers();
-      userPollRef.current = setInterval(loadUsers, 3_000);
-    } else {
-      if (userPollRef.current) clearInterval(userPollRef.current);
-    }
-    return () => { if (userPollRef.current) clearInterval(userPollRef.current); };
+    if (sec === "wds") load("wds");
   // eslint-disable-next-line
-  }, [sec]);
+  }, [wdF]);
 
+  useEffect(() => {
+    if (sec === "kyc") load("kyc");
+  // eslint-disable-next-line
+  }, [kycF]);
+
+  // ── Reload codes when switching to codes tab ───────────────────────────────
   useEffect(() => {
     if (sec === "codes") {
       load("codes");
-      codesPollRef.current = setInterval(() => load("codes"), 10_000);
+      codesPollRef.current = setInterval(() => load("codes"), 15_000);
     } else {
       if (codesPollRef.current) clearInterval(codesPollRef.current);
     }
@@ -340,6 +361,50 @@ export default function AdminPanel({ onExit, role }) {
   const loadUsers = async () => {
     const d = await fetchAdminUsers();
     if (Array.isArray(d)) setUsers(d);
+  };
+
+  // ── Load ALL data at once — runs on mount and every 60s ───────────────────
+  const loadAll = async () => {
+    try {
+      // Run all fetches in parallel — do NOT set loading state here
+      // to avoid blanking out the UI on background refreshes
+      const [usersData, dashData, depsData, wdsData] = await Promise.all([
+        fetchAdminUsers(),
+        fetchAdminDashboard(),
+        fetchAdminDeposits("pending"),
+        fetchAdminWithdrawals("pending"),
+      ]);
+
+      if (Array.isArray(usersData) && usersData.length > 0) setUsers(usersData);
+      if (dashData) setDashboard(dashData);
+
+      // Only update deps/wds if we are currently showing pending
+      // Don't overwrite "All History" view with just pending data
+      if (Array.isArray(depsData) && depsData.length > 0 && depF === "pending") setDeps(depsData);
+      if (Array.isArray(wdsData) && wdsData.length > 0 && wdF === "pending") setWds(wdsData);
+
+      // Load KYC silently
+      const kycStatus = kycF;
+      const r = await af(`/admin/kyc?status=${kycStatus}&limit=1000`);
+      if (r.ok) {
+        const raw = r.data.data?.users || r.data.users || [];
+        const arr = Array.isArray(raw) ? raw : [];
+        if (arr.length > 0 || kycStatus === "pending") {
+          setKycs(arr.map(u => ({
+            id:        u._id,
+            user:      u.kycName || u.kycFullName || u.fullName || "—",
+            email:     u.email   || "",
+            phone:     u.kycPhone || u.phone || "",
+            uid:       "OCT" + (u._id || "").slice(-6).toUpperCase(),
+            address:   u.kycAddress || "",
+            submitted: u.kycSubmittedAt ? fmtDateTime(u.kycSubmittedAt) : fmtDateTime(u.createdAt),
+            status:    u.kycStatus,
+            kycFront:  u.kycFront || u.kycDocFront || null,
+            kycBack:   u.kycBack  || u.kycDocBack  || null,
+          })));
+        }
+      }
+    } catch (_) {}
   };
 
   const loadUsersForNotify = async () => {
@@ -361,52 +426,13 @@ export default function AdminPanel({ onExit, role }) {
     }
     if (s === "deps") {
       const statusParam = !isMain ? "pending" : depF === "all" ? "" : depF;
-      const qs = statusParam ? `status=${statusParam}&limit=1000` : "limit=1000";
-      const r = await af(`/admin/deposits?${qs}`);
-      if (r.ok) {
-        const raw = r.data.data?.deposits || r.data.deposits || r.data.data || [];
-        const arr = Array.isArray(raw) ? raw : [];
-        setDeps(arr.map(d => ({
-          id:      d._id,
-          user:    d.userId?.fullName || d.user?.fullName || d.fullName || "—",
-          email:   d.userId?.email   || d.user?.email   || d.email   || "",
-          phone:   d.userId?.phone   || d.user?.phone   || d.phone   || "",
-          uid:     d.userId ? "OCT" + String(d.userId._id || d.userId).slice(-6).toUpperCase() : d.user ? "OCT" + String(d.user._id || d.user).slice(-6).toUpperCase() : (d.uid || ""),
-          tier:    d.tier || d.userId?.tier || d.user?.tier || "",
-          network: d.network || d.chain || "",
-          hash:    d.txId || d.txHash || d.hash || d.transactionHash || "",
-          amount:  Number(d.amount || 0),
-          status:  d.status,
-          date:    fmtDateTime(d.createdAt),
-        })));
-      } else {
-        const d = await fetchAdminDeposits(statusParam);
-        if (Array.isArray(d)) setDeps(d);
-      }
+      const d = await fetchAdminDeposits(statusParam);
+      if (Array.isArray(d)) setDeps(d);
     }
     if (s === "wds") {
       const statusParam = !isMain ? "pending" : wdF === "all" ? "" : wdF;
-      const qs = statusParam ? `status=${statusParam}&limit=1000` : "limit=1000";
-      const r = await af(`/admin/withdrawals?${qs}`);
-      if (r.ok) {
-        const raw = r.data.data?.withdrawals || r.data.withdrawals || r.data.data || [];
-        const arr = Array.isArray(raw) ? raw : [];
-        setWds(arr.map(w => ({
-          id:      w._id,
-          user:    w.userId?.fullName || w.user?.fullName || w.fullName || "—",
-          email:   w.userId?.email   || w.user?.email   || w.email   || "",
-          phone:   w.userId?.phone   || w.user?.phone   || w.phone   || "",
-          uid:     w.userId ? "OCT" + String(w.userId._id || w.userId).slice(-6).toUpperCase() : w.user ? "OCT" + String(w.user._id || w.user).slice(-6).toUpperCase() : (w.uid || ""),
-          network: w.network || w.chain || "",
-          address: w.walletAddress || w.address || "",
-          amount:  Number(w.amount || 0),
-          status:  w.status,
-          date:    fmtDateTime(w.createdAt),
-        })));
-      } else {
-        const d = await fetchAdminWithdrawals(statusParam);
-        if (Array.isArray(d)) setWds(d);
-      }
+      const d = await fetchAdminWithdrawals(statusParam);
+      if (Array.isArray(d)) setWds(d);
     }
     if (s === "kyc") {
       const status = kycF;
@@ -631,8 +657,8 @@ export default function AdminPanel({ onExit, role }) {
     { icon: "👥", label: "Total Users",  value: users.length || "—" },
     { icon: "✅", label: "KYC Verified", value: users.filter(u => u.kycStatus === "approved").length || 0 },
     { icon: "🔑", label: "Active Codes", value: codes.filter(c => c.status === "active").length },
-    { icon: "💰", label: "WD Approved",  value: wds.filter(w => w.status === "approved").length || 0 },
-    { icon: "⬇",  label: "Dep Pending",  value: deps.filter(d => d.status === "pending").length },
+    { icon: "⬆",  label: "WD Pending",   value: dashboard?.pendingWithdrawals ?? wds.filter(w => w.status === "pending").length },
+    { icon: "⬇",  label: "Dep Pending",  value: dashboard?.pendingDeposits ?? deps.filter(d => d.status === "pending").length },
     { icon: "🪪",  label: "KYC Pending",  value: dashboard?.pendingKyc ?? kycs.filter(k => k.status === "pending").length },
   ];
   const STATS_SUB = [
@@ -770,11 +796,23 @@ export default function AdminPanel({ onExit, role }) {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <span style={{ fontWeight: 700, fontSize: 13 }}>{u.name}</span>
-                        {isMain && u.isHidden && (<span style={{ fontSize: 9, fontWeight: 700, background: "rgba(255,59,92,.15)", color: "var(--dn)", border: "1px solid rgba(255,59,92,.3)", borderRadius: 4, padding: "2px 5px" }}>HIDDEN</span>)}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
-                      <div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)" }}>{u.phone || ""}{u.phone ? " · " : ""}{u.joined}</div>
+  <span
+    style={{ fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+    onClick={() => { navigator.clipboard?.writeText(u.name || ""); addToast("Name copied!", "ok"); }}
+    title="Click to copy name"
+  >
+    {u.name}
+  </span>
+  {isMain && u.isHidden && (<span style={{ fontSize: 9, fontWeight: 700, background: "rgba(255,59,92,.15)", color: "var(--dn)", border: "1px solid rgba(255,59,92,.3)", borderRadius: 4, padding: "2px 5px" }}>HIDDEN</span>)}
+</div>
+<div
+  style={{ fontSize: 11, color: "var(--t2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}
+  onClick={() => { navigator.clipboard?.writeText(u.email || ""); addToast("Email copied!", "ok"); }}
+  title="Click to copy email"
+>
+  {u.email}
+</div>
+<div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)" }}>{u.phone || ""}{u.phone ? " · " : ""}{u.joined}</div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                       <span className="badge b-au" style={{ fontSize: 9 }}>{u.tier || "No Tier"}</span>
@@ -792,10 +830,33 @@ export default function AdminPanel({ onExit, role }) {
                     ))}
                   </div>
                   <div style={{ background: "var(--ink2)", borderRadius: 10, padding: "8px 12px", marginBottom: 10, display: "flex", gap: 16, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 11, color: "var(--t3)" }}>UID: <strong style={{ fontFamily: "var(--m)", color: "var(--gold)", letterSpacing: 1 }}>{u.uid || "—"}</strong></span>
-                    <span style={{ fontSize: 11, color: "var(--t3)" }}>Ref by: <span style={{ color: "var(--blue)" }}>{u.referredBy || "—"}</span></span>
-                    <span style={{ fontSize: 11, color: "var(--t3)" }}>Referrals: <strong style={{ color: getRefLevel(u.referralCount || 0).color }}>{u.referralCount || 0}</strong></span>
-                  </div>
+  <span style={{ fontSize: 11, color: "var(--t3)" }}>
+  UID:{" "}
+  <strong
+    style={{ fontFamily: "var(--m)", color: "var(--gold)", letterSpacing: 1, cursor: "pointer" }}
+    onClick={() => { navigator.clipboard?.writeText(u.uid || ""); addToast("UID copied!", "ok"); }}
+    title="Click to copy UID"
+  >
+    {u.uid || "—"}
+  </strong>
+</span>
+  <span style={{ fontSize: 11, color: "var(--t3)" }}>
+    Ref Code:{" "}
+    <strong
+      style={{ fontFamily: "var(--m)", color: "var(--pu)", letterSpacing: 1, cursor: "pointer" }}
+      onClick={() => { navigator.clipboard?.writeText(u.referralCode || ""); addToast("Referral code copied!", "ok"); }}
+      title="Click to copy"
+    >
+      {u.referralCode || "—"}
+    </strong>
+  </span>
+  <span style={{ fontSize: 11, color: "var(--t3)" }}>
+    Ref by: <span style={{ color: "var(--blue)" }}>{u.referredBy || "—"}</span>
+  </span>
+  <span style={{ fontSize: 11, color: "var(--t3)" }}>
+    Referrals: <strong style={{ color: getRefLevel(u.referralCount || 0).color }}>{u.referralCount || 0}</strong>
+  </span>
+</div>
                   {isMain && (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button className="btn btn-outline btn-sm" style={{ flex: "1 1 70px" }} onClick={() => setEditU(u)}>✏️ Edit</button>

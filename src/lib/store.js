@@ -204,6 +204,12 @@ export const useStore = create((set, get) => ({
           get().setAdminRole("main");
           get().setShowAdmin(true);
           set({ user });
+          setTimeout(() => {
+            get().fetchAdminUsers();
+            get().fetchAdminDashboard();
+            get().fetchAdminDeposits("pending");
+            get().fetchAdminWithdrawals("pending");
+          }, 100);
           return;
         }
         if (user.role === "sub_admin") {
@@ -211,6 +217,12 @@ export const useStore = create((set, get) => ({
           get().setAdminRole("second");
           get().setShowAdmin(true);
           set({ user });
+          setTimeout(() => {
+            get().fetchAdminUsers();
+            get().fetchAdminDashboard();
+            get().fetchAdminDeposits("pending");
+            get().fetchAdminWithdrawals("pending");
+          }, 100);
           return;
         }
         set({ user: mapApiUser(user) });
@@ -265,11 +277,23 @@ export const useStore = create((set, get) => ({
       if (user.role === "main_admin") {
         setAdminAuthed(true); setAdminRole("main"); setShowAdmin(true);
         set({ user }); addToast("Welcome, Main Admin!", "ok");
+        setTimeout(() => {
+          get().fetchAdminUsers();
+          get().fetchAdminDashboard();
+          get().fetchAdminDeposits("pending");
+          get().fetchAdminWithdrawals("pending");
+        }, 100);
         return { success:true, isAdmin:true };
       }
       if (user.role === "sub_admin") {
         setAdminAuthed(true); setAdminRole("second"); setShowAdmin(true);
         set({ user }); addToast("Welcome, Admin!", "ok");
+        setTimeout(() => {
+          get().fetchAdminUsers();
+          get().fetchAdminDashboard();
+          get().fetchAdminDeposits("pending");
+          get().fetchAdminWithdrawals("pending");
+        }, 100);
         return { success:true, isAdmin:true };
       }
       set({ user: mapApiUser(user) });
@@ -589,7 +613,8 @@ export const useStore = create((set, get) => ({
   fetchAdminDeposits: async (status = "pending") => {
     try {
       const params = new URLSearchParams();
-      if (status) params.set("status", status);
+      // Only add status param if it has a value — empty string = all history
+      if (status && status !== "") params.set("status", status);
       params.set("limit", "500");
       const res = await apiFetch(`/admin/deposits?${params.toString()}`);
       if (!res.ok) return [];
@@ -601,9 +626,9 @@ export const useStore = create((set, get) => ({
         email:   d.userId?.email   || "",
         phone:   d.userId?.phone   || "",
         uid:     d.userId ? "OCT" + String(d.userId._id || d.userId).slice(-6).toUpperCase() : "—",
-        tier:    d.tier    || "—",
-        network: d.network || "—",
-        hash:    d.txId    || "—",
+        tier:    d.userId?.tier    || "—",
+        network: d.network         || "—",
+        hash:    d.txId            || "—",
         amount:  d.amount,
         status:  d.status,
         date:    fmtDateTime(d.createdAt),
@@ -614,7 +639,8 @@ export const useStore = create((set, get) => ({
   fetchAdminWithdrawals: async (status = "pending") => {
     try {
       const params = new URLSearchParams();
-      if (status) params.set("status", status);
+      // Only add status param if it has a value — empty string = all history
+      if (status && status !== "") params.set("status", status);
       params.set("limit", "500");
       const res = await apiFetch(`/admin/withdrawals?${params.toString()}`);
       if (!res.ok) return [];
@@ -643,13 +669,13 @@ export const useStore = create((set, get) => ({
       if (!res.ok) return [];
       const raw = await res.json();
       const users = raw.data?.users || raw.users || [];
-      return users.map(u => ({
+      const mapped = users.map(u => ({
         id:             u._id,
         name:           u.fullName || u.email?.split("@")[0] || "—",
         email:          u.email    || "—",
         phone:          u.phone    || "",
         joined:         fmtDateTime(u.createdAt),
-        tier:           u.tier     || "No Tier",
+        tier:           u.tier ? `Tier ${u.tier}` : "No Tier",
         fundBal:        u.fundingBalance || 0,
         tradeBal:       u.tradingBalance || 0,
         earnings:       u.totalProfit   || 0,
@@ -665,6 +691,8 @@ export const useStore = create((set, get) => ({
                           : null,
         referredById:   u.referredBy?._id || null,
       }));
+      if (mapped.length > 0) set({ _adminUsers: mapped });
+      return mapped;
     } catch (_) { return []; }
   },
 
@@ -672,7 +700,9 @@ export const useStore = create((set, get) => ({
     try {
       const res = await apiFetch('/admin/dashboard');
       if (!res.ok) return null;
-      return (await res.json()).data || null;
+      const data = (await res.json()).data || null;
+      if (data) set({ _adminDashboard: data });
+      return data;
     } catch (_) { return null; }
   },
 
@@ -881,4 +911,12 @@ markAllRead: async () => {
     setTimeout(()=>set(s=>({toasts:s.toasts.filter(t=>t.id!==id)})),4000);
   },
   removeToast:id=>set(s=>({toasts:s.toasts.filter(t=>t.id!==id)})),
+
+  // ── Admin pre-cached data ─────────────────────────────
+  // These hold the last fetched admin data so the dashboard
+  // shows real numbers instantly without waiting for a new fetch
+  _adminDashboard: null,
+  _adminUsers: [],
+  _adminDeps: [],
+  _adminWds: [],
 }));

@@ -623,20 +623,58 @@ export default function AdminPanel({ onExit, role }) {
     } else { addToast(r.data?.message || "Failed to update visibility", "err"); }
   };
 
-  const appD = async id => { const ok = await approveDeposit(id); if (ok) setDeps(p => p.map(d => d.id === id ? { ...d, status: "approved" } : d)); };
-  const rejD = async id => { const ok = await rejectDeposit(id);  if (ok) setDeps(p => p.map(d => d.id === id ? { ...d, status: "rejected" } : d)); };
-  const appW = async id => { const ok = await approveWithdrawal(id); if (ok) setWds(p => p.map(w => w.id === id ? { ...w, status: "approved" } : w)); };
-  const rejW = async id => { const ok = await rejectWithdrawal(id);  if (ok) setWds(p => p.map(w => w.id === id ? { ...w, status: "rejected" } : w)); };
+  // ── Helper: refresh dashboard stats silently after any action ─────────────
+  const refreshDash = async () => {
+    const stats = await fetchAdminDashboard();
+    if (stats) setDashboard(stats);
+  };
+
+  const appD = async id => {
+    const ok = await approveDeposit(id);
+    if (ok) {
+      setDeps(p => p.map(d => d.id === id ? { ...d, status: "approved" } : d));
+      refreshDash(); // update Dep Pending count instantly
+    }
+  };
+  const rejD = async id => {
+    const ok = await rejectDeposit(id);
+    if (ok) {
+      setDeps(p => p.map(d => d.id === id ? { ...d, status: "rejected" } : d));
+      refreshDash();
+    }
+  };
+  const appW = async id => {
+    const ok = await approveWithdrawal(id);
+    if (ok) {
+      setWds(p => p.map(w => w.id === id ? { ...w, status: "approved" } : w));
+      refreshDash(); // update WD Pending count instantly
+    }
+  };
+  const rejW = async id => {
+    const ok = await rejectWithdrawal(id);
+    if (ok) {
+      setWds(p => p.map(w => w.id === id ? { ...w, status: "rejected" } : w));
+      refreshDash();
+    }
+  };
 
   const appK = async id => {
     const r = await af(`/admin/kyc/${id}/approve`, { method: "PUT" });
-    if (r.ok) { setKycs(p => p.map(k => k.id === id ? { ...k, status: "approved" } : k)); addToast("KYC approved ✅", "ok"); }
+    if (r.ok) {
+      setKycs(p => p.map(k => k.id === id ? { ...k, status: "approved" } : k));
+      addToast("KYC approved ✅", "ok");
+      refreshDash(); // update KYC Pending count instantly ✅
+    }
     else addToast(r.data?.message || "Failed", "err");
   };
   const rejK = async id => {
     const reason = window.prompt("Rejection reason (optional):") || "Documents unclear";
     const r = await af(`/admin/kyc/${id}/reject`, { method: "PUT", body: JSON.stringify({ reason }) });
-    if (r.ok) { setKycs(p => p.map(k => k.id === id ? { ...k, status: "rejected" } : k)); addToast("KYC rejected", "info"); }
+    if (r.ok) {
+      setKycs(p => p.map(k => k.id === id ? { ...k, status: "rejected" } : k));
+      addToast("KYC rejected", "info");
+      refreshDash();
+    }
     else addToast(r.data?.message || "Failed", "err");
   };
 
@@ -767,7 +805,7 @@ export default function AdminPanel({ onExit, role }) {
                 ))}
               </div>
               <div style={{ background: "var(--ink3)", border: "1px solid var(--ln)", borderRadius: 12, padding: "12px 16px", fontSize: 12, color: "var(--t3)", lineHeight: 1.8 }}>
-                🔄 Auto-refreshes every 30 seconds · Approve/reject updates instantly
+                🔄 Auto-refreshes every 60 seconds · Stats update instantly after actions
               </div>
             </div>
           )}

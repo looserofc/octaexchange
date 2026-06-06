@@ -313,30 +313,39 @@ export default function AdminPanel({ onExit, role }) {
     } catch (e) {}
   }, [isMain]);
 
-  // ── Load everything on mount so dashboard stats are instant ───────────────
-  useEffect(() => {
-    loadAll();
-    // Refresh everything every 60 seconds
-    timerRef.current = setInterval(loadAll, 60_000);
-    return () => clearInterval(timerRef.current);
-  // eslint-disable-next-line
-  }, []);
+  // ── On mount: only load dashboard stats ───────────────────────────────────
+// Everything else loads lazily when tab is opened
+useEffect(() => {
+  // Load only dashboard on mount — lightweight
+  loadDashboardOnly();
+  // Refresh only dashboard stats every 30 seconds
+  timerRef.current = setInterval(loadDashboardOnly, 30_000);
+  return () => clearInterval(timerRef.current);
+// eslint-disable-next-line
+}, []);
 
-  // ── Reload section data when filter changes ────────────────────────────────
-  useEffect(() => {
-    if (sec === "deps") load("deps");
-  // eslint-disable-next-line
-  }, [depF]);
+  // ── Lazy load tab data when tab is first opened ────────────────────────────
+// Each tab loads its data ONLY when the admin navigates to it
+// Filter changes also trigger a reload
+useEffect(() => {
+  if (sec === "users" && users.length === 0) load("users");
+// eslint-disable-next-line
+}, [sec]);
 
-  useEffect(() => {
-    if (sec === "wds") load("wds");
-  // eslint-disable-next-line
-  }, [wdF]);
+useEffect(() => {
+  if (sec === "deps") load("deps");
+// eslint-disable-next-line
+}, [depF, sec === "deps" ? sec : null]);
 
-  useEffect(() => {
-    if (sec === "kyc") load("kyc");
-  // eslint-disable-next-line
-  }, [kycF]);
+useEffect(() => {
+  if (sec === "wds") load("wds");
+// eslint-disable-next-line
+}, [wdF, sec === "wds" ? sec : null]);
+
+useEffect(() => {
+  if (sec === "kyc") load("kyc");
+// eslint-disable-next-line
+}, [kycF, sec === "kyc" ? sec : null]);
 
   // ── Reload codes when switching to codes tab ───────────────────────────────
   useEffect(() => {
@@ -363,51 +372,61 @@ export default function AdminPanel({ onExit, role }) {
     if (Array.isArray(d)) setUsers(d);
   };
 
-  // ── Load ALL data at once — runs on mount and every 60s ───────────────────
-  const loadAll = async () => {
-    try {
-      // Run all fetches in parallel — do NOT set loading state here
-      // to avoid blanking out the UI on background refreshes
-      const [usersData, dashData, depsData, wdsData] = await Promise.all([
-        fetchAdminUsers(),
-        fetchAdminDashboard(),
-        fetchAdminDeposits("pending"),
-        fetchAdminWithdrawals("pending"),
-      ]);
+  // // ── Load ALL data at once — runs on mount and every 60s ───────────────────
+  // const loadAll = async () => {
+  //   try {
+  //     // Run all fetches in parallel — do NOT set loading state here
+  //     // to avoid blanking out the UI on background refreshes
+  //     const [usersData, dashData, depsData, wdsData] = await Promise.all([
+  //       fetchAdminUsers(),
+  //       fetchAdminDashboard(),
+  //       fetchAdminDeposits("pending"),
+  //       fetchAdminWithdrawals("pending"),
+  //     ]);
 
-      if (Array.isArray(usersData) && usersData.length > 0) setUsers(usersData);
-      if (dashData) setDashboard(dashData);
+  //     if (Array.isArray(usersData) && usersData.length > 0) setUsers(usersData);
+  //     if (dashData) setDashboard(dashData);
 
-      // Only update deps/wds if we are currently showing pending
-      // Don't overwrite "All History" view with just pending data
-      if (Array.isArray(depsData) && depsData.length > 0 && depF === "pending") setDeps(depsData);
-      if (Array.isArray(wdsData) && wdsData.length > 0 && wdF === "pending") setWds(wdsData);
+  //     // Only update deps/wds if we are currently showing pending
+  //     // Don't overwrite "All History" view with just pending data
+  //     if (Array.isArray(depsData) && depsData.length > 0 && depF === "pending") setDeps(depsData);
+  //     if (Array.isArray(wdsData) && wdsData.length > 0 && wdF === "pending") setWds(wdsData);
 
-      // Load KYC silently
-      const kycStatus = kycF;
-      const r = await af(`/admin/kyc?status=${kycStatus}&limit=1000`);
-      if (r.ok) {
-        const raw = r.data.data?.users || r.data.users || [];
-        const arr = Array.isArray(raw) ? raw : [];
-        if (arr.length > 0 || kycStatus === "pending") {
-          setKycs(arr.map(u => ({
-            id:        u._id,
-            user:      u.kycName || u.kycFullName || u.fullName || "—",
-            email:     u.email   || "",
-            phone:     u.kycPhone || u.phone || "",
-            uid:       "OCT" + (u._id || "").slice(-6).toUpperCase(),
-            address:   u.kycAddress || "",
-            submitted: u.kycSubmittedAt ? fmtDateTime(u.kycSubmittedAt) : fmtDateTime(u.createdAt),
-            status:    u.kycStatus,
-            kycFront:  u.kycFront || u.kycDocFront || null,
-            kycBack:   u.kycBack  || u.kycDocBack  || null,
-          })));
-        }
-      }
-    } catch (_) {}
-  };
+  //     // Load KYC silently
+  //     const kycStatus = kycF;
+  //     const r = await af(`/admin/kyc?status=${kycStatus}&limit=1000`);
+  //     if (r.ok) {
+  //       const raw = r.data.data?.users || r.data.users || [];
+  //       const arr = Array.isArray(raw) ? raw : [];
+  //       if (arr.length > 0 || kycStatus === "pending") {
+  //         setKycs(arr.map(u => ({
+  //           id:        u._id,
+  //           user:      u.kycName || u.kycFullName || u.fullName || "—",
+  //           email:     u.email   || "",
+  //           phone:     u.kycPhone || u.phone || "",
+  //           uid:       "OCT" + (u._id || "").slice(-6).toUpperCase(),
+  //           address:   u.kycAddress || "",
+  //           submitted: u.kycSubmittedAt ? fmtDateTime(u.kycSubmittedAt) : fmtDateTime(u.createdAt),
+  //           status:    u.kycStatus,
+  //           kycFront:  u.kycFront || u.kycDocFront || null,
+  //           kycBack:   u.kycBack  || u.kycDocBack  || null,
+  //         })));
+  //       }
+  //     }
+  //   } catch (_) {}
+  // };
 
-  const loadUsersForNotify = async () => {
+  // ── Load only dashboard stats — runs every 30 seconds ─────────────────────
+// Does NOT load users, deposits, withdrawals, or KYC
+// Only fetches the 5 numbers shown on the dashboard
+const loadDashboardOnly = async () => {
+  try {
+    const stats = await fetchAdminDashboard();
+    if (stats) setDashboard(stats);
+  } catch (_) {}
+};
+
+const loadUsersForNotify = async () => {
     setNotifyLoading(true);
     const d = await fetchAdminUsers();
     if (Array.isArray(d)) setUsers(d);
@@ -415,15 +434,19 @@ export default function AdminPanel({ onExit, role }) {
   };
 
   const load = async (s) => {
-    setLoading(true);
-    if (s === "dash") {
-      const stats = await fetchAdminDashboard();
-      if (stats) setDashboard(stats);
-    }
-    if (s === "notify") {
-      const d = await fetchAdminUsers();
-      if (Array.isArray(d)) setUsers(d);
-    }
+  setLoading(true);
+  if (s === "dash") {
+    const stats = await fetchAdminDashboard();
+    if (stats) setDashboard(stats);
+  }
+  if (s === "users") {
+    const d = await fetchAdminUsers();
+    if (Array.isArray(d)) setUsers(d);
+  }
+  if (s === "notify") {
+    const d = await fetchAdminUsers();
+    if (Array.isArray(d)) setUsers(d);
+  }
     if (s === "deps") {
       const statusParam = !isMain ? "pending" : depF === "all" ? "" : depF;
       const d = await fetchAdminDeposits(statusParam);
@@ -805,8 +828,8 @@ export default function AdminPanel({ onExit, role }) {
                 ))}
               </div>
               <div style={{ background: "var(--ink3)", border: "1px solid var(--ln)", borderRadius: 12, padding: "12px 16px", fontSize: 12, color: "var(--t3)", lineHeight: 1.8 }}>
-                🔄 Auto-refreshes every 60 seconds · Stats update instantly after actions
-              </div>
+  🔄 Dashboard auto-refreshes every 30 seconds · Other tabs load on demand · Stats update instantly after actions
+</div>
             </div>
           )}
 
@@ -820,7 +843,7 @@ export default function AdminPanel({ onExit, role }) {
                     <span style={{ marginLeft: 8, fontSize: 10, color: "var(--dn)", fontWeight: 700 }}>({users.filter(u => u.isHidden).length} hidden from Admin)</span>
                   )}
                 </span>
-                <button onClick={refresh} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄</button>
+                <button onClick={() => load("users")} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄</button>
               </div>
               <SearchBar value={uQ} onSearch={v => { setUQ(v); }} placeholder="Search name, email, phone or UID..."/>
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading users...</div>}

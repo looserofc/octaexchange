@@ -226,11 +226,20 @@ export const useStore = create((set, get) => ({
           return;
         }
         set({ user: mapApiUser(user) });
-        get().fetchUserHistory();
-        get().fetchNotifs();
-        get().loadActiveTrades();
-        get().fetchPendingVolume();
-        get().startTradePolling();
+
+// Load critical data immediately
+get().fetchNotifs();
+get().loadActiveTrades();
+get().fetchPendingVolume();
+
+// Defer heavy history load
+setTimeout(() => {
+  get().fetchUserHistory();
+}, 2000);
+
+// Start trade polling only if there are active trades
+// startTradePolling checks internally after loadActiveTrades
+get().startTradePolling();
       } else {
         setTokenInternal(null, null);
       }
@@ -297,13 +306,20 @@ export const useStore = create((set, get) => ({
         return { success:true, isAdmin:true };
       }
       set({ user: mapApiUser(user) });
-      addToast("Welcome back!", "ok");
-      fetchUserHistory();
-      fetchNotifs();
-      loadActiveTrades();
-      fetchPendingVolume();
-      get().startTradePolling();
-      return { success:true };
+addToast("Welcome back!", "ok");
+
+// Critical first
+fetchNotifs();
+loadActiveTrades();
+fetchPendingVolume();
+
+// Defer history
+setTimeout(() => {
+  fetchUserHistory();
+}, 2000);
+
+get().startTradePolling();
+return { success:true };
     } catch (_) {
       return { success:false, message:"Network error — is the server running?" };
     }
@@ -489,29 +505,38 @@ export const useStore = create((set, get) => ({
 
   _tradePoller: null,
   startTradePolling: () => {
-    const { _tradePoller, loadActiveTrades } = get();
-    if (_tradePoller) return;
-    const poll = async () => {
-      const prevTrades = [...get().activeTrades];
-      await loadActiveTrades();
-      const currTrades = get().activeTrades;
-      const prevIds = new Set(prevTrades.map(t => t.id));
-      const currIds = new Set(currTrades.map(t => t.id));
-      const completedIds = [...prevIds].filter(id => !currIds.has(id));
-      if (completedIds.length > 0) {
-        setTimeout(async () => {
-          await get().refreshBalances();
-          await get().fetchUserHistory();
-          const completed = prevTrades.filter(t => completedIds.includes(t.id));
-          completed.forEach(t => {
-            get().addToast(`✅ +$${(t.profit||0).toFixed(2)} added to Trading Account`, "ok");
-          });
-        }, 4000);
-      }
-    };
-    const id = setInterval(poll, 10000);
-    set({ _tradePoller: id });
-  },
+  const { _tradePoller } = get();
+  if (_tradePoller) return;
+
+  const poll = async () => {
+    // ── Only poll if user has active trades ──────────────
+    // If no active trades, skip the API call entirely
+    const currentTrades = get().activeTrades;
+    if (currentTrades.length === 0) return;
+
+    const prevTrades = [...currentTrades];
+    await get().loadActiveTrades();
+    const currTrades = get().activeTrades;
+
+    const prevIds = new Set(prevTrades.map(t => t.id));
+    const currIds = new Set(currTrades.map(t => t.id));
+    const completedIds = [...prevIds].filter(id => !currIds.has(id));
+
+    if (completedIds.length > 0) {
+      setTimeout(async () => {
+        await get().refreshBalances();
+        await get().fetchUserHistory();
+        const completed = prevTrades.filter(t => completedIds.includes(t.id));
+        completed.forEach(t => {
+          get().addToast(`✅ +$${(t.profit||0).toFixed(2)} added to Trading Account`, "ok");
+        });
+      }, 4000);
+    }
+  };
+
+  const id = setInterval(poll, 10000);
+  set({ _tradePoller: id });
+},
 
   stopTradePolling: () => {
     const { _tradePoller } = get();
@@ -519,19 +544,21 @@ export const useStore = create((set, get) => ({
   },
 
   fetchNotifs: async () => {
-    try {
-      const res = await apiFetch("/user/notifications");
-      if (!res.ok) return;
-      const notifications = (await res.json()).data.notifications;
-      const notifs = notifications.map(n => ({
-        id:n._id, title:n.title, body:n.message,
-        time:timeAgo(new Date(n.createdAt)), read:n.isRead, type:n.type,
-      }));
-      set({ notifs });
-      const hasNewBonus = notifications.some(n => n.type === 'referral' && !n.isRead);
-      if (hasNewBonus) get().refreshBalances();
-    } catch (_) {}
-  },
+  try {
+    const res = await apiFetch("/user/notifications");
+    if (!res.ok) return;
+    const data = await res.json();
+    const notifications = data.data?.notifications || [];
+    const notifs = notifications.map(n => ({
+      id:n._id, title:n.title, body:n.message,
+      time:timeAgo(new Date(n.createdAt)), read:n.isRead, type:n.type,
+    }));
+    set({ notifs });
+    // Only refresh balances if there are unread referral bonuses
+    const hasNewBonus = notifications.some(n => n.type === 'referral' && !n.isRead);
+    if (hasNewBonus) get().refreshBalances();
+  } catch (_) {}
+},
 
   fetchTeam: async () => {
     try {

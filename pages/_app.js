@@ -8,7 +8,7 @@ import { useStore } from "@/lib/store";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 export default function MyApp({ Component, pageProps }) {
-  const { setUser, setAdminAuthed, setAdminRole, setShowAdmin, fetchNotifs, fetchUserHistory, loadActiveTrades } = useStore();
+  const { setUser, setAdminAuthed, setAdminRole, setShowAdmin, fetchNotifs, fetchUserHistory, loadActiveTrades, startTradePolling, fetchPendingVolume } = useStore();
   const restored = useRef(false);
 
   useEffect(() => {
@@ -17,7 +17,6 @@ export default function MyApp({ Component, pageProps }) {
 
     const restoreSession = async () => {
       try {
-        // If user manually logged out, skip restore entirely
         const hasLoggedOut = sessionStorage.getItem("manualLogout");
         if (hasLoggedOut === "true") return;
 
@@ -45,7 +44,6 @@ export default function MyApp({ Component, pageProps }) {
         }
         if (!user) return;
 
-        // Clear logout flag only after confirmed valid session
         sessionStorage.removeItem("manualLogout");
 
         if (user.role === "main_admin") {
@@ -81,11 +79,23 @@ export default function MyApp({ Component, pageProps }) {
 
         useStore.setState({ page: "home" });
 
-        fetchNotifs();
-        fetchUserHistory();
-        loadActiveTrades();
+        // ── Deferred loading — critical UI first, rest after ──
+fetchNotifs();
+fetchPendingVolume();
 
-      } catch (_) {}
+// Load active trades THEN start polling immediately after
+loadActiveTrades().then(() => {
+  startTradePolling();
+});
+
+// Defer heavy history load
+setTimeout(() => {
+  fetchUserHistory();
+}, 2000);
+
+      } catch (err) {
+        console.error("Session restore error:", err);
+      }
     };
 
     restoreSession();
@@ -99,10 +109,7 @@ export default function MyApp({ Component, pageProps }) {
         <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
         <meta name="theme-color" content="#07090f"/>
         <meta name="apple-mobile-web-app-capable" content="yes"/>
-        <link rel="preconnect" href="https://fonts.googleapis.com"/>
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
-        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
-      </Head>
+        </Head>
       <Component {...pageProps}/>
     </>
   );

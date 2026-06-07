@@ -690,9 +690,12 @@ return { success:true };
     } catch (_) { return []; }
   },
 
-  fetchAdminUsers: async () => {
-    try {
-      const res = await apiFetch("/admin/users?limit=500");
+  fetchAdminUsers: async (status = "") => {
+  try {
+    const params = new URLSearchParams();
+    params.set("limit", "500");
+    if (status) params.set("status", status);
+    const res = await apiFetch(`/admin/users?${params.toString()}`);
       if (!res.ok) return [];
       const raw = await res.json();
       const users = raw.data?.users || raw.users || [];
@@ -702,7 +705,7 @@ return { success:true };
         email:          u.email    || "—",
         phone:          u.phone    || "",
         joined:         fmtDateTime(u.createdAt),
-        tier:           u.tier ? `Tier ${u.tier}` : "No Tier",
+        tier: u.tier || "No Tier",
         fundBal:        u.fundingBalance || 0,
         tradeBal:       u.tradingBalance || 0,
         earnings:       u.totalProfit   || 0,

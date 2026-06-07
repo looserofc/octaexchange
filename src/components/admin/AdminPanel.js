@@ -253,10 +253,11 @@ export default function AdminPanel({ onExit, role }) {
   const [kycF,     setKycF]    = useState("pending");
   const [previewImage, setPreviewImage] = useState(null);
 
-  const [uQ,  setUQ]  = useState("");
-  const [dQ,  setDQ]  = useState("");
-  const [wQ,  setWQ]  = useState("");
-  const [kQ,  setKQ]  = useState("");
+  const [uQ,       setUQ]       = useState("");
+const [userFilter, setUserFilter] = useState("all");
+const [dQ,  setDQ]  = useState("");
+const [wQ,  setWQ]  = useState("");
+const [kQ,  setKQ]  = useState("");
 
   const [selPair, setSelPair] = useState(PAIRS[0]);
   const [selSide, setSelSide] = useState("BUY");
@@ -328,9 +329,9 @@ useEffect(() => {
 // Each tab loads its data ONLY when the admin navigates to it
 // Filter changes also trigger a reload
 useEffect(() => {
-  if (sec === "users" && users.length === 0) load("users");
+  if (sec === "users") load("users", userFilter);
 // eslint-disable-next-line
-}, [sec]);
+}, [sec, userFilter]);
 
 useEffect(() => {
   if (sec === "deps") load("deps");
@@ -433,14 +434,14 @@ const loadUsersForNotify = async () => {
     setNotifyLoading(false);
   };
 
-  const load = async (s) => {
+  const load = async (s, filter = "") => {
   setLoading(true);
   if (s === "dash") {
     const stats = await fetchAdminDashboard();
     if (stats) setDashboard(stats);
   }
   if (s === "users") {
-    const d = await fetchAdminUsers();
+    const d = await fetchAdminUsers(filter === "all" ? "" : filter);
     if (Array.isArray(d)) setUsers(d);
   }
   if (s === "notify") {
@@ -835,17 +836,37 @@ const loadUsersForNotify = async () => {
 
           {/* ── USERS ─────────────────────────────────────────────────────── */}
           {sec === "users" && (
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 12, color: "var(--t3)" }}>
-                  {fu.length} user{fu.length !== 1 ? "s" : ""}
-                  {isMain && users.filter(u => u.isHidden).length > 0 && (
-                    <span style={{ marginLeft: 8, fontSize: 10, color: "var(--dn)", fontWeight: 700 }}>({users.filter(u => u.isHidden).length} hidden from Admin)</span>
-                  )}
-                </span>
-                <button onClick={() => load("users")} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄</button>
-              </div>
-              <SearchBar value={uQ} onSearch={v => { setUQ(v); }} placeholder="Search name, email, phone or UID..."/>
+  <div>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+      <span style={{ fontSize: 12, color: "var(--t3)" }}>
+        {fu.length} user{fu.length !== 1 ? "s" : ""}
+        {isMain && users.filter(u => u.isHidden).length > 0 && (
+          <span style={{ marginLeft: 8, fontSize: 10, color: "var(--dn)", fontWeight: 700 }}>({users.filter(u => u.isHidden).length} hidden from Admin)</span>
+        )}
+      </span>
+      <button onClick={() => load("users", userFilter)} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>🔄</button>
+    </div>
+
+    {/* ── User Filter Tabs ── */}
+    <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+      {[
+        { id: "all",       label: "👥 All Users" },
+        { id: "deposited", label: "✅ Deposited" },
+      ].map(f => (
+        <button key={f.id} onClick={() => { setUserFilter(f.id); setUQ(""); usersPag.setPage(1); }}
+          style={{
+            padding: "7px 14px", borderRadius: 10,
+            border: `1.5px solid ${userFilter === f.id ? "var(--gold)" : "var(--ln)"}`,
+            background: userFilter === f.id ? "rgba(240,165,0,.1)" : "var(--ink3)",
+            color: userFilter === f.id ? "var(--gold)" : "var(--t2)",
+            fontWeight: 700, fontSize: 12, cursor: "pointer",
+          }}>
+          {f.label}
+        </button>
+      ))}
+    </div>
+
+    <SearchBar value={uQ} onSearch={v => { setUQ(v); }} placeholder="Search name, email, phone or UID..."/>
               {loading && <div style={{ textAlign: "center", padding: 20, color: "var(--t3)" }}>Loading users...</div>}
               {!loading && fu.length === 0 && <div className="empty"><div className="ei">👥</div><p style={{ fontSize: 13 }}>No users found</p></div>}
               {!loading && fu.length > 0 && (<><PageInfo total={fu.length} pag={usersPag}/><Pagination page={usersPag.page} totalPages={usersPag.totalPages} onPage={usersPag.setPage}/></>)}

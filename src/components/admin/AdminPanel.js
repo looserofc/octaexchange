@@ -27,6 +27,7 @@ const MENU_MAIN = [
   {id:"deps",   icon:"⬇",  label:"Deposits"},
   {id:"wds",    icon:"⬆",  label:"Withdrawals"},
   {id:"kyc",    icon:"🪪",  label:"KYC"},
+  {id:"salary", icon:"💰", label:"Salary"},
   {id:"banners",icon:"🖼",  label:"Banners"},
   {id:"notifs", icon:"🔔", label:"Notifs"},
   {id:"notify", icon:"📨", label:"Notify User"},
@@ -224,15 +225,16 @@ export default function AdminPanel({ onExit, role }) {
   const MENU   = isMain ? MENU_MAIN : MENU_SUB;
 
   const {
-    addToast, addSignal, banners, addBanner, toggleBanner, deleteBanner,
-    addNotif, prices, setWick,
-    generateSignal, fetchSignals, approveDeposit, rejectDeposit,
-    approveWithdrawal, rejectWithdrawal,
-    fetchAdminDeposits, fetchAdminWithdrawals, fetchAdminUsers, fetchAdminDashboard,
-    fetchAdminUserTeam,
-    updateAdminUser, broadcastNotif, sendNotifToUser, setPriceWick,
-    _adminDashboard, _adminUsers, _adminDeps, _adminWds,
-  } = useStore();
+  addToast, addSignal, banners, addBanner, toggleBanner, deleteBanner,
+  addNotif, prices, setWick,
+  generateSignal, fetchSignals, approveDeposit, rejectDeposit,
+  approveWithdrawal, rejectWithdrawal,
+  fetchAdminDeposits, fetchAdminWithdrawals, fetchAdminUsers, fetchAdminDashboard,
+  fetchAdminUserTeam,
+  updateAdminUser, broadcastNotif, sendNotifToUser, setPriceWick,
+  sendSalary, fetchSalaryHistory,
+  _adminDashboard, _adminUsers, _adminDeps, _adminWds,
+} = useStore();
 
   const [sec,       setSec]      = useState("dash");
   const [users,     setUsers]    = useState([]);
@@ -271,6 +273,17 @@ const [kQ,  setKQ]  = useState("");
 
   // ── Notify User state ──────────────────────────────────────────────────────
   const [notifySearch,   setNotifySearch]   = useState("");
+  // ── Salary state ───────────────────────────────────────────
+const [salaryAmount,     setSalaryAmount]    = useState("");
+const [salaryNote,       setSalaryNote]      = useState("");
+const [salarySelected,   setSalarySelected]  = useState([]);
+const [salarySearch,     setSalarySearch]    = useState("");
+const [salarySending,    setSalarySending]   = useState(false);
+const [salaryHistory,    setSalaryHistory]   = useState([]);
+const [salaryHistPage,   setSalaryHistPage]  = useState(1);
+const [salaryHistTotal,  setSalaryHistTotal] = useState(0);
+const [salaryTab,        setSalaryTab]       = useState("send");
+const [salaryLoading,    setSalaryLoading]   = useState(false);
   const [notifySelected, setNotifySelected] = useState(null);
   const [notifyTitle,    setNotifyTitle]    = useState("");
   const [notifyBody,     setNotifyBody]     = useState("");
@@ -368,6 +381,14 @@ useEffect(() => {
   // eslint-disable-next-line
   }, [sec]);
 
+  useEffect(() => {
+  if (sec === "salary") {
+    if (users.length === 0) loadUsersForNotify();
+    loadSalaryHistory(1);
+  }
+// eslint-disable-next-line
+}, [sec]);
+
   const loadUsers = async () => {
     const d = await fetchAdminUsers();
     if (Array.isArray(d)) setUsers(d);
@@ -433,6 +454,18 @@ const loadUsersForNotify = async () => {
     if (Array.isArray(d)) setUsers(d);
     setNotifyLoading(false);
   };
+
+
+  const loadSalaryHistory = async (page = 1) => {
+  setSalaryLoading(true);
+  const result = await fetchSalaryHistory(page);
+  setSalaryHistory(result.logs || []);
+  setSalaryHistTotal(result.total || 0);
+  setSalaryHistPage(page);
+  setSalaryLoading(false);
+};
+
+
 
   const load = async (s, filter = "") => {
   setLoading(true);
@@ -638,14 +671,27 @@ const loadUsersForNotify = async () => {
     else addToast("Delete failed", "err");
   };
 
+  const toggleBan = async (id, name) => {
+  const u = users.find(x => x.id === id);
+  const isBanned = u?.isBanned || false;
+  if (!window.confirm(`${isBanned ? "Unban" : "Ban"} ${name}?`)) return;
+  const r = await af(`/admin/users/${id}/ban`, { method: "PUT" });
+  if (r.ok) {
+    setUsers(p => p.map(x => x.id === id ? { ...x, isBanned: !x.isBanned } : x));
+    addToast(isBanned ? `${name} unbanned ✅` : `${name} banned 🔨`, "info");
+  } else {
+    addToast(r.data?.message || "Failed to toggle ban", "err");
+  }
+};
+  
   const toggleHide = async (id) => {
-    const r = await af(`/admin/users/${id}/hide`, { method: "PUT" });
-    if (r.ok) {
-      const u = users.find(x => x.id === id);
-      setUsers(p => p.map(x => x.id === id ? { ...x, isHidden: !x.isHidden } : x));
-      addToast(u?.isHidden ? "User now visible to Admin" : "User hidden from Admin", "info");
-    } else { addToast(r.data?.message || "Failed to update visibility", "err"); }
-  };
+  const r = await af(`/admin/users/${id}/hide`, { method: "PUT" });
+  if (r.ok) {
+    const u = users.find(x => x.id === id);
+    setUsers(p => p.map(x => x.id === id ? { ...x, isHidden: !x.isHidden } : x));
+    addToast(u?.isHidden ? "User now visible to Admin" : "User hidden from Admin", "info");
+  } else { addToast(r.data?.message || "Failed to update visibility", "err"); }
+};
 
   // ── Helper: refresh dashboard stats silently after any action ─────────────
   const refreshDash = async () => {
@@ -940,15 +986,27 @@ const loadUsersForNotify = async () => {
   </span>
 </div>
                   {isMain && (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button className="btn btn-outline btn-sm" style={{ flex: "1 1 70px" }} onClick={() => setEditU(u)}>✏️ Edit</button>
-                      <button className="btn btn-red btn-sm"     style={{ flex: "1 1 70px" }} onClick={() => delU(u.id, u.name)}>🗑 Delete</button>
-                      <button onClick={() => toggleHide(u.id)}
-                        style={{ flex: "1 1 70px", padding: "7px 10px", borderRadius: 8, border: `1.5px solid ${u.isHidden ? "rgba(255,59,92,.4)" : "rgba(255,165,0,.3)"}`, background: u.isHidden ? "rgba(255,59,92,.08)" : "rgba(255,165,0,.08)", color: u.isHidden ? "var(--dn)" : "var(--gold)", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-                        {u.isHidden ? "👁 Show" : "🚫 Hide"}
-                      </button>
-                    </div>
-                  )}
+  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+    <button className="btn btn-outline btn-sm" style={{ flex: "1 1 70px" }} onClick={() => setEditU(u)}>✏️ Edit</button>
+    <button className="btn btn-red btn-sm"     style={{ flex: "1 1 70px" }} onClick={() => delU(u.id, u.name)}>🗑 Delete</button>
+    <button onClick={() => toggleBan(u.id, u.name)}
+      style={{ flex: "1 1 70px", padding: "7px 10px", borderRadius: 8,
+        border: `1.5px solid ${u.isBanned ? "rgba(0,200,150,.4)" : "rgba(255,59,92,.4)"}`,
+        background: u.isBanned ? "rgba(0,200,150,.08)" : "rgba(255,59,92,.08)",
+        color: u.isBanned ? "var(--up)" : "var(--dn)",
+        fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+      {u.isBanned ? "✅ Unban" : "🔨 Ban"}
+    </button>
+    <button onClick={() => toggleHide(u.id)}
+      style={{ flex: "1 1 70px", padding: "7px 10px", borderRadius: 8,
+        border: `1.5px solid ${u.isHidden ? "rgba(255,59,92,.4)" : "rgba(255,165,0,.3)"}`,
+        background: u.isHidden ? "rgba(255,59,92,.08)" : "rgba(255,165,0,.08)",
+        color: u.isHidden ? "var(--dn)" : "var(--gold)",
+        fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+      {u.isHidden ? "👁 Show" : "🚫 Hide"}
+    </button>
+  </div>
+)}
                 </div>
               ))}
               {!loading && fu.length > 0 && (<Pagination page={usersPag.page} totalPages={usersPag.totalPages} onPage={usersPag.setPage}/>)}
@@ -1574,6 +1632,302 @@ const loadUsersForNotify = async () => {
                   <div className="ei">📨</div>
                   <p style={{ fontSize: 13 }}>Search for a user above to get started</p>
                   <p style={{ fontSize: 11, color: "var(--t3)", marginTop: 4 }}>{users.length} users loaded</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── SALARY ───────────────────────────────────── */}
+          {sec === "salary" && isMain && (
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>💰 Salary Management</div>
+              <div style={{ fontSize: 12, color: "var(--t3)", marginBottom: 16 }}>
+                Select users and send salary directly to their Funding Account.
+              </div>
+
+              {/* Tabs */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                {[["send", "💰 Send Salary"], ["history", "📋 History"]].map(([id, label]) => (
+                  <button key={id} onClick={() => setSalaryTab(id)}
+                    style={{
+                      flex: 1, padding: "10px 8px", borderRadius: 10,
+                      border: `1.5px solid ${salaryTab === id ? "var(--gold)" : "var(--ln)"}`,
+                      background: salaryTab === id ? "rgba(240,165,0,.1)" : "var(--ink3)",
+                      color: salaryTab === id ? "var(--gold)" : "var(--t2)",
+                      fontWeight: 700, fontSize: 12, cursor: "pointer",
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── SEND TAB ── */}
+              {salaryTab === "send" && (
+                <div>
+                  {/* Amount */}
+                  <div className="card" style={{ padding: 16, marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, color: "var(--t3)", fontFamily: "var(--m)", letterSpacing: 1, marginBottom: 12 }}>SALARY AMOUNT</div>
+                    <div className="fg">
+                      <label className="lbl">Amount Per User ($)</label>
+                      <input className="inp" type="number" placeholder="e.g. 10"
+                        value={salaryAmount} onChange={e => setSalaryAmount(e.target.value)}
+                        style={{ fontSize: 16, fontWeight: 700 }}/>
+                    </div>
+                    <div className="fg">
+                      <label className="lbl">Note (optional)</label>
+                      <input className="inp" placeholder="e.g. Weekly salary - Week 23"
+                        value={salaryNote} onChange={e => setSalaryNote(e.target.value)}/>
+                    </div>
+                    {salarySelected.length > 0 && parseFloat(salaryAmount) > 0 && (
+                      <div style={{ background: "rgba(0,200,150,.08)", border: "1px solid rgba(0,200,150,.2)", borderRadius: 10, padding: "10px 14px", marginTop: 8 }}>
+                        <div style={{ fontSize: 12, color: "var(--t2)" }}>
+                          <strong style={{ color: "var(--up)" }}>{salarySelected.length}</strong> users selected ·
+                          Total: <strong style={{ color: "var(--gold)", fontFamily: "var(--m)" }}>
+                            ${(parseFloat(salaryAmount || 0) * salarySelected.length).toFixed(2)}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* User Selection */}
+                  <div className="card" style={{ padding: 16, marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, color: "var(--t3)", fontFamily: "var(--m)", letterSpacing: 1 }}>
+                        SELECT USERS ({salarySelected.length} selected)
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          onClick={() => setSalarySelected(
+                            users
+                              .filter(u => !salarySearch.trim() ||
+                                u.name?.toLowerCase().includes(salarySearch.toLowerCase()) ||
+                                u.email?.toLowerCase().includes(salarySearch.toLowerCase()) ||
+                                u.uid?.toLowerCase().includes(salarySearch.toLowerCase())
+                              )
+                              .slice(0, 50)
+                              .map(u => u.id)
+                          )}
+                          style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--gold)", background: "rgba(240,165,0,.08)", color: "var(--gold)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          Select All
+                        </button>
+                        {salarySelected.length > 0 && (
+                          <button onClick={() => setSalarySelected([])}
+                            style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Search */}
+                    <div className="iw" style={{ marginBottom: 12 }}>
+                      <input className="inp" placeholder="Search by name, email or UID..."
+                        value={salarySearch} onChange={e => setSalarySearch(e.target.value)}
+                        style={{ paddingLeft: 40, fontSize: 13 }}/>
+                      <div style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: "var(--t3)", pointerEvents: "none" }}>
+                        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      </div>
+                    </div>
+
+                    {users.length === 0 && (
+                      <div style={{ fontSize: 12, color: "var(--t3)", textAlign: "center", padding: 16 }}>
+                        ⏳ Loading users...
+                      </div>
+                    )}
+
+                    {/* User List */}
+                    <div style={{ maxHeight: 400, overflowY: "auto" }}>
+                      {users
+                        .filter(u => !salarySearch.trim() ||
+                          u.name?.toLowerCase().includes(salarySearch.toLowerCase()) ||
+                          u.email?.toLowerCase().includes(salarySearch.toLowerCase()) ||
+                          u.uid?.toLowerCase().includes(salarySearch.toLowerCase())
+                        )
+                        .slice(0, 50)
+                        .map(u => {
+                          const isSelected = salarySelected.includes(u.id);
+                          return (
+                            <div key={u.id}
+                              onClick={() => setSalarySelected(prev =>
+                                prev.includes(u.id)
+                                  ? prev.filter(id => id !== u.id)
+                                  : [...prev, u.id]
+                              )}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 10,
+                                padding: "10px 12px", borderRadius: 10, marginBottom: 6,
+                                cursor: "pointer",
+                                border: `1.5px solid ${isSelected ? "var(--gold)" : "var(--ln)"}`,
+                                background: isSelected ? "rgba(240,165,0,.07)" : "var(--ink2)",
+                              }}>
+                              {/* Checkbox */}
+                              <div style={{
+                                width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                                border: `2px solid ${isSelected ? "var(--gold)" : "var(--t3)"}`,
+                                background: isSelected ? "var(--gold)" : "transparent",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>
+                                {isSelected && <span style={{ color: "#000", fontSize: 12, fontWeight: 900 }}>✓</span>}
+                              </div>
+                              {/* Avatar */}
+                              <div style={{
+                                width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                                background: "linear-gradient(135deg,var(--gold),#c07800)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                color: "#000", fontWeight: 900, fontSize: 13,
+                              }}>
+                                {(u.name || "?")[0].toUpperCase()}
+                              </div>
+                              {/* Info */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, fontSize: 13 }}>{u.name}</div>
+                                <div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)" }}>
+                                  {u.uid} · {u.tier || "No Tier"}
+                                </div>
+                              </div>
+                              {/* Balance */}
+                              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                <div style={{ fontSize: 11, color: "var(--up)", fontFamily: "var(--m)", fontWeight: 700 }}>
+                                  ${(u.fundBal || 0).toFixed(0)}
+                                </div>
+                                <div style={{ fontSize: 9, color: "var(--t3)" }}>funding</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      {users.filter(u => !salarySearch.trim() ||
+                        u.name?.toLowerCase().includes(salarySearch.toLowerCase()) ||
+                        u.email?.toLowerCase().includes(salarySearch.toLowerCase()) ||
+                        u.uid?.toLowerCase().includes(salarySearch.toLowerCase())
+                      ).length === 0 && salarySearch && (
+                        <div style={{ textAlign: "center", padding: 20, color: "var(--t3)", fontSize: 13 }}>
+                          No users found
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Send Button */}
+                  <button
+                    className="btn btn-gold btn-block"
+                    disabled={salarySending || salarySelected.length === 0 || !salaryAmount || parseFloat(salaryAmount) <= 0}
+                    onClick={async () => {
+                      if (salarySelected.length === 0) { addToast("Select at least one user", "err"); return; }
+                      if (!salaryAmount || parseFloat(salaryAmount) <= 0) { addToast("Enter a valid salary amount", "err"); return; }
+                      if (!window.confirm(`Send $${salaryAmount} salary to ${salarySelected.length} user(s)?\nTotal: $${(parseFloat(salaryAmount) * salarySelected.length).toFixed(2)}`)) return;
+                      setSalarySending(true);
+                      const result = await sendSalary(salarySelected, parseFloat(salaryAmount), salaryNote);
+                      if (result.success) {
+                        setSalarySelected([]);
+                        setSalaryAmount("");
+                        setSalaryNote("");
+                        setSalarySearch("");
+                        setSalaryTab("history");
+                        loadSalaryHistory(1);
+                      }
+                      setSalarySending(false);
+                    }}
+                    style={{ fontSize: 15, fontWeight: 800, padding: "14px 0" }}>
+                    {salarySending
+                      ? <><span className="spin spin-w" style={{ marginRight: 8 }}/>Sending Salary...</>
+                      : `💰 Send $${salaryAmount || "0"} to ${salarySelected.length} User${salarySelected.length !== 1 ? "s" : ""}`
+                    }
+                  </button>
+                </div>
+              )}
+
+              {/* ── HISTORY TAB ── */}
+              {salaryTab === "history" && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <span style={{ fontSize: 12, color: "var(--t3)" }}>{salaryHistTotal} salary batch{salaryHistTotal !== 1 ? "es" : ""}</span>
+                    <button onClick={() => loadSalaryHistory(salaryHistPage)}
+                      style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: "var(--t3)", fontSize: 11, cursor: "pointer" }}>
+                      🔄 Refresh
+                    </button>
+                  </div>
+
+                  {salaryLoading && (
+                    <div style={{ textAlign: "center", padding: 30, color: "var(--t3)" }}>Loading history...</div>
+                  )}
+
+                  {!salaryLoading && salaryHistory.length === 0 && (
+                    <div className="empty">
+                      <div className="ei">💰</div>
+                      <p style={{ fontSize: 13 }}>No salary history yet</p>
+                    </div>
+                  )}
+
+                  {salaryHistory.map(log => (
+                    <div key={log._id} className="card" style={{ padding: 14, marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 16, color: "var(--gold)", fontFamily: "var(--m)" }}>
+                            ${log.amount} <span style={{ fontSize: 12, color: "var(--t3)", fontWeight: 400 }}>per user</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 2 }}>
+                            {new Date(log.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--up)", fontFamily: "var(--m)" }}>
+                            Total: ${log.totalPaid?.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: 10, color: "var(--t3)", marginTop: 2 }}>
+                            {log.recipients?.length || 0} users paid
+                          </div>
+                        </div>
+                      </div>
+
+                      {log.note && (
+                        <div style={{ fontSize: 11, color: "var(--t2)", background: "var(--ink2)", borderRadius: 8, padding: "6px 10px", marginBottom: 10 }}>
+                          📝 {log.note}
+                        </div>
+                      )}
+
+                      {log.sentBy && (
+                        <div style={{ fontSize: 10, color: "var(--t3)", marginBottom: 10 }}>
+                          Sent by: <span style={{ color: "var(--blue)" }}>{log.sentBy.fullName || log.sentBy.email}</span>
+                        </div>
+                      )}
+
+                      <div style={{ fontSize: 10, color: "var(--t3)", fontFamily: "var(--m)", letterSpacing: 1, marginBottom: 6 }}>
+                        RECIPIENTS ({log.recipients?.length || 0})
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {(log.recipients || []).slice(0, 10).map(r => (
+                          <span key={String(r.userId)} style={{
+                            fontSize: 11, padding: "3px 8px", borderRadius: 6,
+                            background: "var(--ink2)", border: "1px solid var(--ln)", color: "var(--t2)",
+                          }}>
+                            {r.fullName || "Unknown"}
+                          </span>
+                        ))}
+                        {(log.recipients || []).length > 10 && (
+                          <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--ink2)", border: "1px solid var(--ln)", color: "var(--t3)" }}>
+                            +{log.recipients.length - 10} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {salaryHistTotal > 20 && (
+                    <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>
+                      <button onClick={() => loadSalaryHistory(salaryHistPage - 1)} disabled={salaryHistPage === 1}
+                        style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: salaryHistPage === 1 ? "var(--t3)" : "var(--t2)", fontSize: 12, fontWeight: 700, cursor: salaryHistPage === 1 ? "not-allowed" : "pointer" }}>
+                        ‹ Prev
+                      </button>
+                      <span style={{ fontSize: 12, color: "var(--t3)", alignSelf: "center" }}>
+                        Page {salaryHistPage} of {Math.ceil(salaryHistTotal / 20)}
+                      </span>
+                      <button onClick={() => loadSalaryHistory(salaryHistPage + 1)} disabled={salaryHistPage >= Math.ceil(salaryHistTotal / 20)}
+                        style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid var(--ln)", background: "var(--ink3)", color: salaryHistPage >= Math.ceil(salaryHistTotal / 20) ? "var(--t3)" : "var(--t2)", fontSize: 12, fontWeight: 700, cursor: salaryHistPage >= Math.ceil(salaryHistTotal / 20) ? "not-allowed" : "pointer" }}>
+                        Next ›
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

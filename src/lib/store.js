@@ -561,23 +561,79 @@ return { success:true };
 },
 
   fetchTeam: async () => {
-    try {
-      const res = await apiFetch("/user/team");
-      if (!res.ok) return;
-      const { total, members } = (await res.json()).data;
-      set(s => ({
-        user: s.user ? {
-          ...s.user, referralCount: total,
-          referrals: members.map(m => ({
-            id:m._id, name:m.fullName, email:m.email,
-            joined:new Date(m.createdAt).toLocaleDateString(),
-            kycStatus:m.kycStatus, tier:m.tier||'Bronze',
-            deposited:true, earned:5, status:'active',
-          }))
-        } : s.user
-      }));
-    } catch (_) {}
-  },
+  try {
+    const res = await apiFetch("/user/team");
+    if (!res.ok) return;
+    const data = (await res.json()).data;
+
+    const myReferrals = data.myReferrals || { total: 0, members: [] };
+    const myTeam      = data.myTeam      || { total: 0, members: [] };
+
+    set(s => ({
+      user: s.user ? {
+        ...s.user,
+        referralCount: myReferrals.total,
+        teamCount:     myTeam.total,
+        referrals: myReferrals.members.map(m => ({
+          id:         m.id,
+          uid:        m.uid,
+          name:       m.name,
+          joined:     m.joined,
+          kycStatus:  m.kycStatus,
+          tier:       m.tier || 'No Tier',
+          referredBy: m.referredBy || null,
+        })),
+        teamMembers: myTeam.members.map(m => ({
+          id:         m.id,
+          uid:        m.uid,
+          name:       m.name,
+          joined:     m.joined,
+          kycStatus:  m.kycStatus,
+          tier:       m.tier || 'No Tier',
+          referredBy: m.referredBy || null,
+        })),
+      } : s.user
+    }));
+  } catch (_) {}
+},
+
+// ── Send Salary ───────────────────────────────────────────
+sendSalary: async (userIds, amount, note) => {
+  const { addToast } = get();
+  try {
+    const res = await apiFetch('/admin/salary/send', {
+      method: 'POST',
+      body:   JSON.stringify({ userIds, amount, note }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      addToast(`💰 Salary of $${amount} sent to ${data.data?.sent || userIds.length} user(s) ✅`, 'ok');
+      return { success: true, data: data.data };
+    } else {
+      addToast(data.message || 'Failed to send salary', 'err');
+      return { success: false };
+    }
+  } catch (_) {
+    addToast('Network error', 'err');
+    return { success: false };
+  }
+},
+
+// ── Fetch Salary History ──────────────────────────────────
+fetchSalaryHistory: async (page = 1) => {
+  try {
+    const res = await apiFetch(`/admin/salary/history?page=${page}&limit=20`);
+    if (!res.ok) return { logs: [], total: 0 };
+    const data = (await res.json()).data;
+    return {
+      logs:  data.logs  || [],
+      total: data.pagination?.total || 0,
+      page:  data.pagination?.page  || 1,
+    };
+  } catch (_) {
+    return { logs: [], total: 0 };
+  }
+},
 
   generateSignal: async ({ coin, direction, tier, expiryMinutes }) => {
     const { addToast, addSignal } = get();
@@ -700,27 +756,28 @@ return { success:true };
       const raw = await res.json();
       const users = raw.data?.users || raw.users || [];
       const mapped = users.map(u => ({
-        id:             u._id,
-        name:           u.fullName || u.email?.split("@")[0] || "—",
-        email:          u.email    || "—",
-        phone:          u.phone    || "",
-        joined:         fmtDateTime(u.createdAt),
-        tier: u.tier || "No Tier",
-        fundBal:        u.fundingBalance || 0,
-        tradeBal:       u.tradingBalance || 0,
-        earnings:       u.totalProfit   || 0,
-        withdrawn:      u.totalWithdrawn || 0,
-        kycStatus:      u.kycStatus     || "none",
-        hasDeposit:     u.hasDeposit || u.hasApprovedDeposit || u.depositApproved || false,
-        referralCount:  u.qualifiedReferralCount ?? u.referralCount ?? 0,
-        referralCode:   u.referralCode || "",
-        uid:            "OCT" + (u._id || "").slice(-6).toUpperCase(),
-        isHidden:       u.isHidden || false,
-        referredBy:     u.referredBy
-                          ? `${u.referredBy.fullName || u.referredBy.email} (${u.referredBy.referralCode || ""})`
-                          : null,
-        referredById:   u.referredBy?._id || null,
-      }));
+  id:             u._id,
+  name:           u.fullName || u.email?.split("@")[0] || "—",
+  email:          u.email    || "—",
+  phone:          u.phone    || "",
+  joined:         fmtDateTime(u.createdAt),
+  tier:           u.tier || "No Tier",
+  fundBal:        u.fundingBalance  || 0,
+  tradeBal:       u.tradingBalance  || 0,
+  earnings:       u.totalProfit     || 0,
+  withdrawn:      u.totalWithdrawn  || 0,
+  kycStatus:      u.kycStatus       || "none",
+  hasDeposit:     u.hasDeposit || u.hasApprovedDeposit || u.depositApproved || false,
+  referralCount:  u.qualifiedReferralCount ?? u.referralCount ?? 0,
+  referralCode:   u.referralCode    || "",
+  uid:            "OCT" + (u._id || "").slice(-6).toUpperCase(),
+  isHidden:       u.isHidden        || false,
+  isBanned:       u.isBanned        || false,
+  referredBy:     u.referredBy
+                    ? `${u.referredBy.fullName || u.referredBy.email} (${u.referredBy.referralCode || ""})`
+                    : null,
+  referredById:   u.referredBy?._id || null,
+}));
       if (mapped.length > 0) set({ _adminUsers: mapped });
       return mapped;
     } catch (_) { return []; }

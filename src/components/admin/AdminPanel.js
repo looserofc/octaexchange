@@ -1896,20 +1896,24 @@ const loadUsersForNotify = async () => {
                         RECIPIENTS ({log.recipients?.length || 0})
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {(log.recipients || []).slice(0, 10).map(r => (
-                          <span key={String(r.userId)} style={{
-                            fontSize: 11, padding: "3px 8px", borderRadius: 6,
-                            background: "var(--ink2)", border: "1px solid var(--ln)", color: "var(--t2)",
-                          }}>
-                            {r.fullName || "Unknown"}
-                          </span>
-                        ))}
-                        {(log.recipients || []).length > 10 && (
-                          <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--ink2)", border: "1px solid var(--ln)", color: "var(--t3)" }}>
-                            +{log.recipients.length - 10} more
-                          </span>
-                        )}
-                      </div>
+  {(log.recipients || []).slice(0, 10).map(r => (
+    <span key={String(r.userId)} style={{
+      fontSize: 11, padding: "4px 10px", borderRadius: 6,
+      background: "var(--ink2)", border: "1px solid var(--ln)",
+      color: "var(--t2)", display: "flex", flexDirection: "column", gap: 1,
+    }}>
+      <span style={{ fontWeight: 700 }}>{r.fullName || "Unknown"}</span>
+      <span style={{ fontSize: 9, color: "var(--gold)", fontFamily: "var(--m)", letterSpacing: 1 }}>
+        OCT{String(r.userId).slice(-6).toUpperCase()}
+      </span>
+    </span>
+  ))}
+  {(log.recipients || []).length > 10 && (
+    <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, background: "var(--ink2)", border: "1px solid var(--ln)", color: "var(--t3)" }}>
+      +{log.recipients.length - 10} more
+    </span>
+  )}
+</div>
                     </div>
                   ))}
 

@@ -34,9 +34,9 @@ export const COINS = {
 // Note: network fee here is ONLY added to the deposit total the user must send.
 // Withdrawals have NO network fee — only 5% platform fee (FUND_WD_FEE above).
 export const NETWORKS = [
-  {id:"trc20", name:"TRC20 (USDT)", fee:1,    feeLabel:"$1",     min:10,  address:"TA3JYRziYUNCFbfVkmVXK1atU3fBD5j1oK"},
-  {id:"erc20", name:"ERC20 (USDT)", fee:0.6,  feeLabel:"$0.60",  min:50,  address:"0xF598f9d8B16079Bd88c1229696118b8e32697D5f"},
-  {id:"bep20", name:"BEP20 (USDT)", fee:0.01, feeLabel:"$0.01",  min:10,  address:"0xF598f9d8B16079Bd88c1229696118b8e32697D5f"},
+  {id:"trc20", name:"TRC20 (USDT)", fee:1,    feeLabel:"$1",     min:10,  address:"THEaEqZcmix4sGsmmqDbNaa1WKY4BVBzuK"},
+  {id:"erc20", name:"ERC20 (USDT)", fee:0.6,  feeLabel:"$0.60",  min:50,  address:"0xA72baC3ba1e3D4f5e3D6789a184Fe51aC39E1311"},
+  {id:"bep20", name:"BEP20 (USDT)", fee:0.01, feeLabel:"$0.01",  min:10,  address:"0xA72baC3ba1e3D4f5e3D6789a184Fe51aC39E1311"},
 ];
 
 export const PAIRS     = ["BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT"];

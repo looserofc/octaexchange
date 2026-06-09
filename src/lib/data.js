@@ -54,9 +54,12 @@ export const REF_LEVELS = [
   {level:7, label:"LV 7", min:5000, max:999999, color:"#f0a500"},
 ];
 
-export function getRefLevel(count=0){
-  if(count<=0)return REF_LEVELS[0];
-  for(let i=REF_LEVELS.length-1;i>=1;i--){if(count>=REF_LEVELS[i].min)return REF_LEVELS[i];}
+export function getRefLevel(referralCount = 0, teamCount = 0) {
+  const total = (referralCount || 0) + (teamCount || 0);
+  if (total <= 0) return REF_LEVELS[0];
+  for (let i = REF_LEVELS.length - 1; i >= 1; i--) {
+    if (total >= REF_LEVELS[i].min) return REF_LEVELS[i];
+  }
   return REF_LEVELS[0];
 }
 export function fmtP(sym,p){

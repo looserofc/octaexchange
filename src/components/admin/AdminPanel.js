@@ -944,7 +944,7 @@ const loadUsersForNotify = async () => {
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                       <span className="badge b-au" style={{ fontSize: 9 }}>{u.tier || "No Tier"}</span>
-                      {(() => { const lv = getRefLevel(u.referralCount ?? 0); return lv.level > 0 ? <span style={{ display: "inline-flex", background: lv.color + "18", border: "1px solid " + lv.color + "40", borderRadius: 20, padding: "2px 7px", fontSize: 9, fontWeight: 900, fontFamily: "var(--m)", color: lv.color }}>★ {lv.label}</span> : null; })()}
+                      {(() => { const lv = getRefLevel(u.referralCount ?? 0, u.teamCount ?? 0); return lv.level > 0 ? <span style={{ display: "inline-flex", background: lv.color + "18", border: "1px solid " + lv.color + "40", borderRadius: 20, padding: "2px 7px", fontSize: 9, fontWeight: 900, fontFamily: "var(--m)", color: lv.color }}>★ {lv.label}</span> : null; })()}
                       <SB s={u.kycStatus ?? "none"}/>
                       {(u.hasDeposit || (u.fundBal > 0) || (u.tradeBal > 0) || (u.earnings > 0) || (u.withdrawn > 0)) && <DepositedBadge/>}
                     </div>
@@ -982,7 +982,7 @@ const loadUsersForNotify = async () => {
     Ref by: <span style={{ color: "var(--blue)" }}>{u.referredBy || "—"}</span>
   </span>
   <span style={{ fontSize: 11, color: "var(--t3)" }}>
-    Referrals: <strong style={{ color: getRefLevel(u.referralCount || 0).color }}>{u.referralCount || 0}</strong>
+    Referrals: <strong style={{ color: getRefLevel(u.referralCount || 0, u.teamCount || 0).color }}>{u.referralCount || 0}</strong>
   </span>
 </div>
                   {isMain && (

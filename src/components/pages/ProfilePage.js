@@ -272,59 +272,227 @@ function HelpScreen({ onBack }) {
 
 function TeamScreen({ user, onBack }) {
   const { fetchTeam } = useStore();
-  useEffect(() => { fetchTeam(); }, []);
-  const refs = (user.referrals ?? []).filter(r => r && r.name);
+  const [teamTab, setTeamTab] = useState("referrals");
+  const [search,  setSearch]  = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      await fetchTeam();
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const referrals  = user.referrals   ?? [];
+  const teamMembers= user.teamMembers ?? [];
+
+  const filteredReferrals = referrals.filter(r => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      r.name?.toLowerCase().includes(q) ||
+      r.uid?.toLowerCase().includes(q)
+    );
+  });
+
+  const filteredTeam = teamMembers.filter(m => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      m.name?.toLowerCase().includes(q) ||
+      m.uid?.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div>
       <BackHdr onBack={onBack} title="My Team"/>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:18 }}>
-        {[{label:"Members",value:refs.length,c:"var(--blue)"},{label:"Ref Earned",value:"$"+(refs.filter(r=>r.deposited).length*5),c:"var(--up)"},{label:"Active",value:refs.filter(r=>r.status==="active").length,c:"var(--gold)"}].map(s=>(
-          <div key={s.label} className="card2" style={{ padding:"14px 10px", textAlign:"center" }}>
-            <div style={{ fontFamily:"var(--m)", fontSize:22, fontWeight:900, color:s.c }}>{s.value}</div>
-            <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", marginTop:4, letterSpacing:".5px" }}>{s.label.toUpperCase()}</div>
+
+      {/* ── Stats Row ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+        <div className="card2" style={{ padding:"14px 10px", textAlign:"center" }}>
+          <div style={{ fontFamily:"var(--m)", fontSize:24, fontWeight:900, color:"var(--up)" }}>
+            {referrals.length}
           </div>
-        ))}
-      </div>
-      <div style={{ background:"linear-gradient(135deg,rgba(240,165,0,.08),rgba(240,165,0,.03))", border:"1px solid rgba(240,165,0,.2)", borderRadius:14, padding:"14px 16px", marginBottom:18 }}>
-        <div style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>Your Referral Code</div>
-        {/* Code row */}
-        <div style={{ background:"var(--ink2)", border:"1px solid var(--ln2)", borderRadius:10, padding:"8px 12px", marginBottom:8, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontFamily:"var(--m)", fontSize:14, fontWeight:700, color:"var(--gold)", letterSpacing:2 }}>{user.referralCode ?? "NXT00000"}</span>
-          <button className="btn btn-gold btn-sm" style={{ fontSize:11, padding:"4px 10px" }} onClick={() => { navigator.clipboard?.writeText(user.referralCode??"NXT00000"); useStore.getState().addToast("Code copied!","ok"); }}>Copy Code</button>
+          <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", marginTop:4, letterSpacing:".5px" }}>
+            MY REFERRALS
+          </div>
         </div>
-        {/* Link row */}
+        <div className="card2" style={{ padding:"14px 10px", textAlign:"center" }}>
+          <div style={{ fontFamily:"var(--m)", fontSize:24, fontWeight:900, color:"var(--blue)" }}>
+            {teamMembers.length}
+          </div>
+          <div style={{ fontSize:10, color:"var(--t3)", fontFamily:"var(--m)", marginTop:4, letterSpacing:".5px" }}>
+            MY TEAM
+          </div>
+        </div>
+      </div>
+
+      {/* ── Referral Code Card ── */}
+      <div style={{ background:"linear-gradient(135deg,rgba(240,165,0,.08),rgba(240,165,0,.03))", border:"1px solid rgba(240,165,0,.2)", borderRadius:14, padding:"14px 16px", marginBottom:16 }}>
+        <div style={{ fontSize:13, fontWeight:700, marginBottom:8 }}>Your Referral Code</div>
+        <div style={{ background:"var(--ink2)", border:"1px solid var(--ln2)", borderRadius:10, padding:"8px 12px", marginBottom:8, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontFamily:"var(--m)", fontSize:14, fontWeight:700, color:"var(--gold)", letterSpacing:2 }}>
+            {user.referralCode ?? "—"}
+          </span>
+          <button className="btn btn-gold btn-sm" style={{ fontSize:11, padding:"4px 10px" }}
+            onClick={() => { navigator.clipboard?.writeText(user.referralCode ?? ""); useStore.getState().addToast("Code copied!", "ok"); }}>
+            Copy Code
+          </button>
+        </div>
         {user.referralCode && (
           <div style={{ background:"var(--ink2)", border:"1px solid var(--ln2)", borderRadius:10, padding:"8px 12px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
             <span style={{ fontFamily:"var(--m)", fontSize:10, color:"var(--t3)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>
               {typeof window !== "undefined" ? window.location.origin : ""}/ref/{user.referralCode}
             </span>
-            <button className="btn btn-outline btn-sm" style={{ fontSize:11, padding:"4px 10px", flexShrink:0 }} onClick={() => { const link = `${window.location.origin}/ref/${user.referralCode}`; navigator.clipboard?.writeText(link); useStore.getState().addToast("Link copied!","ok"); }}>🔗 Copy Link</button>
+            <button className="btn btn-outline btn-sm" style={{ fontSize:11, padding:"4px 10px", flexShrink:0 }}
+              onClick={() => { const link = `${window.location.origin}/ref/${user.referralCode}`; navigator.clipboard?.writeText(link); useStore.getState().addToast("Link copied!", "ok"); }}>
+              🔗 Copy Link
+            </button>
           </div>
         )}
-        <div style={{ fontSize:12, color:"var(--t2)", marginTop:8 }}>Earn <strong style={{ color:"var(--up)" }}>$5 bonus</strong> for every friend who deposits</div>
+        <div style={{ fontSize:12, color:"var(--t2)", marginTop:8 }}>
+          Earn <strong style={{ color:"var(--up)" }}>$5 bonus</strong> for every friend who deposits
+        </div>
       </div>
-      <div style={{ fontWeight:800, fontSize:15, marginBottom:12 }}>Team Members</div>
-      <div className="card" style={{ padding:"0 16px" }}>
-        {refs.length===0
-          ? <div className="empty"><div className="ei">👥</div><p>No referrals yet. Share your code!</p></div>
-          : refs.map((r,i) => (
-            <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 0", borderBottom:i<refs.length-1?"1px solid var(--ln)":"none" }}>
-              <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,var(--gold),#c07800)", display:"flex", alignItems:"center", justifyContent:"center", color:"#000", fontWeight:900, fontSize:13, flexShrink:0 }}>
-                {(r.name||"?").split(" ").map(w=>w[0]).join("")}
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontWeight:700, fontSize:13 }}>{r.name}</div>
-                <div style={{ fontSize:11, color:"var(--t3)", fontFamily:"var(--m)", marginTop:1 }}>{r.email} · {r.joined}</div>
-              </div>
-              <div style={{ textAlign:"right" }}>
-                <span className={`badge ${r.status==="active"?"b-up":"b-au"}`} style={{ fontSize:10, marginBottom:4, display:"block" }}>{r.status}</span>
-                <div style={{ fontSize:11, color:"var(--up)", fontFamily:"var(--m)", fontWeight:700 }}>{r.deposited ? "+$5" : "$0"}</div>
-              </div>
+
+      {/* ── Tabs ── */}
+      <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+        {[
+          ["referrals", `👥 My Referrals (${referrals.length})`, "var(--up)"],
+          ["team",      `🌐 My Team (${teamMembers.length})`,    "var(--blue)"],
+        ].map(([id, label, color]) => (
+          <button key={id} onClick={() => { setTeamTab(id); setSearch(""); }}
+            style={{
+              flex:1, padding:"10px 8px", borderRadius:10, cursor:"pointer",
+              border:`1.5px solid ${teamTab === id ? color : "var(--ln)"}`,
+              background: teamTab === id ? color + "18" : "var(--ink3)",
+              color: teamTab === id ? color : "var(--t2)",
+              fontWeight:700, fontSize:12,
+            }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Search ── */}
+      <div className="iw" style={{ marginBottom:14 }}>
+        <input className="inp"
+          placeholder={teamTab === "referrals" ? "Search by name or UID..." : "Search by name or UID..."}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ paddingLeft:40, fontSize:13 }}/>
+        <div style={{ position:"absolute", left:13, top:"50%", transform:"translateY(-50%)", color:"var(--t3)", pointerEvents:"none" }}>
+          <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+      </div>
+
+      {/* ── Loading ── */}
+      {loading && (
+        <div style={{ textAlign:"center", padding:30, color:"var(--t3)", fontSize:13 }}>
+          Loading team data...
+        </div>
+      )}
+
+      {/* ── MY REFERRALS TAB ── */}
+      {!loading && teamTab === "referrals" && (
+        <div>
+          {filteredReferrals.length === 0 ? (
+            <div className="empty">
+              <div className="ei">👥</div>
+              <p>{search ? "No results found" : "No referrals yet. Share your code!"}</p>
             </div>
-          ))
-        }
-      </div>
-      <div style={{ height:8 }}/>
+          ) : (
+            filteredReferrals.map((r, i) => (
+              <div key={r.id || i} style={{
+                background:"var(--ink3)", border:"1px solid var(--ln)",
+                borderRadius:12, padding:"12px 14px", marginBottom:8,
+              }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  {/* Avatar */}
+                  <div style={{
+                    width:38, height:38, borderRadius:10, flexShrink:0,
+                    background:"linear-gradient(135deg,var(--up),#009966)",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    color:"#000", fontWeight:900, fontSize:14,
+                  }}>
+                    {(r.name || "?")[0].toUpperCase()}
+                  </div>
+                  {/* Info */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:700, fontSize:13 }}>{r.name}</div>
+                    <div style={{ fontSize:10, color:"var(--gold)", fontFamily:"var(--m)", fontWeight:700, marginTop:2, letterSpacing:1 }}>
+                      {r.uid}
+                    </div>
+                    <div style={{ fontSize:10, color:"var(--t3)", marginTop:2 }}>
+                      Joined {r.joined}
+                    </div>
+                  </div>
+                  {/* Right side */}
+<div style={{ display:"flex", flexDirection:"column", gap:4, alignItems:"flex-end", flexShrink:0 }}>
+  <span style={{ fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:6, background:"rgba(0,200,150,.15)", color:"var(--up)", border:"1px solid rgba(0,200,150,.3)" }}>
+    ✓ Deposited
+  </span>
+  <span className={`badge ${r.kycStatus === "approved" ? "b-up" : "b-au"}`} style={{ fontSize:9 }}>
+    {r.kycStatus || "none"}
+  </span>
+</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── MY TEAM TAB ── */}
+      {!loading && teamTab === "team" && (
+        <div>
+          {/* Info banner */}
+          <div style={{ background:"rgba(45,156,255,.06)", border:"1px solid rgba(45,156,255,.15)", borderRadius:10, padding:"10px 14px", marginBottom:12, fontSize:12, color:"var(--t2)", lineHeight:1.6 }}>
+            🌐 Your full downline — everyone in your network who has deposited.
+          </div>
+          {filteredTeam.length === 0 ? (
+            <div className="empty">
+              <div className="ei">🌐</div>
+              <p>{search ? "No results found" : "No team members yet."}</p>
+            </div>
+          ) : (
+            filteredTeam.map((m, i) => (
+              <div key={m.id || i} style={{
+                background:"var(--ink3)", border:"1px solid var(--ln)",
+                borderRadius:12, padding:"12px 14px", marginBottom:8,
+                display:"flex", alignItems:"center", gap:10,
+              }}>
+                {/* Avatar */}
+                <div style={{
+                  width:38, height:38, borderRadius:10, flexShrink:0,
+                  background:"linear-gradient(135deg,var(--blue),#1a6fa8)",
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#fff", fontWeight:900, fontSize:14,
+                }}>
+                  {(m.name || "?")[0].toUpperCase()}
+                </div>
+                {/* Info — name, uid, joined only */}
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:700, fontSize:13 }}>{m.name}</div>
+                  <div style={{ fontSize:10, color:"var(--gold)", fontFamily:"var(--m)", fontWeight:700, marginTop:2, letterSpacing:1 }}>
+                    {m.uid}
+                  </div>
+                  <div style={{ fontSize:10, color:"var(--t3)", marginTop:2 }}>
+                    Joined {m.joined}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      <div style={{ height:20 }}/>
     </div>
   );
 }

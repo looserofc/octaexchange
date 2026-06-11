@@ -629,8 +629,9 @@ export default function ProfilePage() {
   const [tab,    setTabL]   = useState(profileTab || "account");
   const [screen, setScreen] = useState(null);
   const unread   = notifs.filter(n=>!n.read).length;
-  const refCount = user.referralCount ?? (user.referrals?.length ?? 0);
-  const lvInfo   = getRefLevel(refCount);
+  const refCount  = user.referralCount  ?? (user.referrals?.length    ?? 0);
+const teamCount = user.teamCount      ?? (user.teamMembers?.length   ?? 0);
+const lvInfo    = getRefLevel(refCount, teamCount);
   const kycOk    = user.kycStatus === "approved";
   const kycPend  = user.kycStatus === "pending";
   const setTab   = t => { setTabL(t); setProfileTab(t); };
@@ -725,7 +726,7 @@ export default function ProfilePage() {
             @{user.username||user.email.split("@")[0]}{user.uid&&<span style={{ color:"var(--gold)", marginLeft:6 }}>· {user.uid}</span>}
           </div>
           <div style={{ display:"flex", gap:5, marginTop:7, flexWrap:"wrap" }}>
-            {user.tier&&<span className="badge b-au">{user.tier.name}</span>}
+            {/* {user.tier&&<span className="badge b-au">{user.tier.name}</span>} */}
             {kycOk  &&<span className="badge b-up"  style={{ fontSize:10 }}>✅ Verified</span>}
             {kycPend&&<span className="badge b-au" style={{ fontSize:10 }}>⏳ KYC Pending</span>}
             {!kycOk&&!kycPend&&<span className="badge b-dn" style={{ fontSize:10 }}>Unverified</span>}

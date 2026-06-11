@@ -232,13 +232,12 @@ get().fetchNotifs();
 get().loadActiveTrades();
 get().fetchPendingVolume();
 
-// Defer heavy history load
+// Defer heavy history load and team
 setTimeout(() => {
   get().fetchUserHistory();
+  get().fetchTeam();
 }, 2000);
 
-// Start trade polling only if there are active trades
-// startTradePolling checks internally after loadActiveTrades
 get().startTradePolling();
       } else {
         setTokenInternal(null, null);
@@ -313,9 +312,10 @@ fetchNotifs();
 loadActiveTrades();
 fetchPendingVolume();
 
-// Defer history
+// Defer history and team
 setTimeout(() => {
   fetchUserHistory();
+  get().fetchTeam();
 }, 2000);
 
 get().startTradePolling();

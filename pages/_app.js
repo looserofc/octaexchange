@@ -83,14 +83,13 @@ export default function MyApp({ Component, pageProps }) {
 fetchNotifs();
 fetchPendingVolume();
 
-// Load active trades THEN start polling immediately after
 loadActiveTrades().then(() => {
   startTradePolling();
 });
 
-// Defer heavy history load
 setTimeout(() => {
   fetchUserHistory();
+  useStore.getState().fetchTeam();
 }, 2000);
 
       } catch (err) {
